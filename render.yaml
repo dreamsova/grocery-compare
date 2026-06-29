@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: grocery-compare
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        sync: false
+      - key: KROGER_CLIENT_ID
+        sync: false
+      - key: KROGER_CLIENT_SECRET
+        sync: false
+      - key: DB_PATH
+        value: /data/grocery.db
+      - key: CORS_ORIGIN
+        sync: false
+    disk:
+      name: grocery-data
+      mountPath: /data
+      sizeGB: 1

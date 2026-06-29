@@ -1,0 +1,11 @@
+{
+  "name": "grocery-compare",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix backend run dev",
+    "start": "npm --prefix backend start",
+    "seed": "npm --prefix backend run seed",
+    "check": "npm --prefix backend run check"
+  }
+}
