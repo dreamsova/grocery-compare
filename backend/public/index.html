@@ -424,6 +424,11 @@ function setUser(user) {
 // ─────────────────────────────────────────────────────────────────────────────
 function connectSocket() {
   if (state.socket?.connected) return;
+  if (typeof io !== 'function') {
+    console.warn('Socket.IO client unavailable; realtime list updates disabled.');
+    state.socket = null;
+    return;
+  }
   state.socket = io({ auth: { token: accessToken }, autoConnect: true });
 
   state.socket.on('item_updated', ({ item_id, changes }) => {
