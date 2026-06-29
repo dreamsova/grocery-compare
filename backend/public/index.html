@@ -149,6 +149,7 @@
     .price-tag.kg { color: var(--kg); }
     .price-tag.wm { color: var(--wm); }
     .price-tag.ic { color: var(--ic); }
+    .price-tag.community { color: var(--orange); }
     .price-tag.stale { opacity: .5; }
     .savings-badge { font-size: .7rem; background: #dcfce7; color: var(--green);
       padding: 2px 6px; border-radius: 20px; font-weight: 700; }
@@ -572,7 +573,19 @@ function sourceKindLabel(kind) {
   if (kind === 'official_api') return 'Official API';
   if (kind === 'receipt_verified') return 'Receipt Verified';
   if (kind === 'manual') return 'Manual';
+  if (kind === 'legacy') return 'Legacy';
   return 'Community Price';
+}
+function storeDisplayLabel(store) {
+  return ({
+    kroger: 'Kroger',
+    manual: 'Community',
+    aldi: 'Aldi',
+    costco: 'Costco',
+    trader_joes: "Trader Joe's",
+    walmart: 'Walmart',
+    instacart: 'Instacart',
+  })[store] || store || 'Community';
 }
 function confidenceLabel(score) {
   const pct = Math.round((+score || 0) * 100);
@@ -897,9 +910,11 @@ function renderListDetail() {
 
   list.items.forEach(item => {
     const kgPrice = item.kroger_price ? +item.kroger_price : null;
+    const communityPrice = item.community_price ? +item.community_price : null;
     const ic = item.ic_plus !== undefined ? calcIC(item.instacart_price, item.ic_plus) : calcIC(item.instacart_price, state.user?.ic_plus);
     const wm = calcWM(item.walmart_price, state.user?.wm_plus);
     const hasKG = !!kgPrice;
+    const hasCommunity = !!communityPrice;
     const hasWM = !!item.walmart_price;
     const hasIC = !!item.instacart_price;
 
@@ -936,6 +951,14 @@ function renderListDetail() {
     // Prices
     const prices = el('div', { class: 'item-prices' });
     if (hasKG) prices.appendChild(el('span', { class: 'price-tag kg' }, `Kroger ${fmt(kgPrice)}`));
+    if (hasCommunity) {
+      prices.appendChild(el('span', { class: 'price-tag community' },
+        `${storeDisplayLabel(item.community_store)} ${fmt(communityPrice)}`
+      ));
+      prices.appendChild(el('span', { class: 'confidence-dot' },
+        sourceKindLabel(item.community_source_kind)
+      ));
+    }
     if (hasWM) prices.appendChild(el('span', { class: 'price-tag wm' }, `WM ${fmt(wm.total)}`));
     if (hasIC) prices.appendChild(el('span', { class: 'price-tag ic' }, `IC ${fmt(ic.total)}`));
 
@@ -978,11 +1001,16 @@ function renderListSummary(list) {
   const wrap = el('div', {});
   wrap.appendChild(el('div', { class: 'section-title' }, 'Cart Total Comparison'));
 
-  let totalKG = 0, totalIC = 0, totalWM = 0, countKG = 0, countIC = 0, countWM = 0;
+  let totalKG = 0, totalCommunity = 0, totalIC = 0, totalWM = 0;
+  let countKG = 0, countCommunity = 0, countIC = 0, countWM = 0;
   list.items?.forEach(item => {
     if (item.kroger_price) {
       totalKG += +item.kroger_price || 0;
       countKG++;
+    }
+    if (item.community_price) {
+      totalCommunity += +item.community_price || 0;
+      countCommunity++;
     }
     if (item.instacart_price) {
       totalIC += calcIC(item.instacart_price, state.user?.ic_plus).total;
@@ -994,7 +1022,7 @@ function renderListSummary(list) {
     }
   });
 
-  if (!countKG && !countIC && !countWM) {
+  if (!countKG && !countCommunity && !countIC && !countWM) {
     wrap.appendChild(el('div', { class: 'text-sm' }, 'No prices yet — refresh prices or add them manually.'));
     return wrap;
   }
@@ -1007,6 +1035,15 @@ function renderListSummary(list) {
     p.appendChild(feeRow('Subtotal', fmt(totalKG)));
     p.appendChild(feeRow('Source', 'Official API'));
     p.appendChild(feeRow('Grand Total', fmt(totalKG), true));
+    grid.appendChild(p);
+  }
+
+  if (countCommunity) {
+    const p = el('div', { class: 'store-panel wm' });
+    p.appendChild(el('div', { class: 'store-panel-title' }, 'Community Total'));
+    p.appendChild(feeRow('Subtotal', fmt(totalCommunity)));
+    p.appendChild(feeRow('Source', 'Manual / receipt verified'));
+    p.appendChild(feeRow('Grand Total', fmt(totalCommunity), true));
     grid.appendChild(p);
   }
 
@@ -1096,6 +1133,8 @@ function renderProductDetail() {
   const grid = el('div', { class: 'compare-grid', style: 'margin-bottom:16px' });
 
   const kgPrice = p.prices?.kroger?.price;
+  const community = p.prices?.community;
+  const communityPrice = community?.price;
   const icPrice = p.prices?.instacart?.price;
   const wmPrice = p.prices?.walmart?.price;
   const ic = calcIC(icPrice, state.user?.ic_plus);
@@ -1107,6 +1146,21 @@ function renderProductDetail() {
     panel.appendChild(feeRow('Item Price', fmt(kgPrice)));
     panel.appendChild(feeRow('Source', 'Official API'));
     panel.appendChild(feeRow('Total', fmt(kgPrice), true));
+    grid.appendChild(panel);
+  }
+
+  if (communityPrice) {
+    const panel = el('div', { class: 'store-panel wm' });
+    panel.appendChild(el('div', { class: 'store-panel-title' },
+      `${storeDisplayLabel(community.store)} Community`
+    ));
+    panel.appendChild(feeRow('Item Price', fmt(communityPrice)));
+    panel.appendChild(feeRow('Source', sourceKindLabel(community.source_kind)));
+    panel.appendChild(feeRow('Confidence', confidenceLabel(community.confidence)));
+    if (community.evidence_note) {
+      panel.appendChild(feeRow('Evidence', community.evidence_note));
+    }
+    panel.appendChild(feeRow('Total', fmt(communityPrice), true));
     grid.appendChild(panel);
   }
 
@@ -1157,25 +1211,21 @@ function renderProductDetail() {
 
   // Price history
   if (p.history?.length) {
-    wrap.appendChild(el('div', { class: 'section-title' }, 'Price History'));
+    wrap.appendChild(el('div', { class: 'section-title' }, 'Price Evidence History'));
     const histCard = el('div', { class: 'card' });
-    const wmHistory = p.history.filter(h => h.store === 'walmart').slice(0, 10).reverse();
-    const icHistory = p.history.filter(h => h.store === 'instacart').slice(0, 10).reverse();
-
-    [['walmart', wmHistory, 'WM'], ['instacart', icHistory, 'IC']].forEach(([store, hist, label]) => {
-      if (!hist.length) return;
-      const row = el('div', { style: 'margin-bottom:10px' });
-      row.appendChild(el('div', { class: 'text-sm', style: 'margin-bottom:4px' }, label + ' last ' + hist.length + ' readings'));
-      const bars = el('div', { class: 'history-bar' });
-      const max = Math.max(...hist.map(h => h.price));
-      hist.forEach(h => {
-        const pct = Math.max(10, Math.round((h.price / max) * 100));
-        const bar = el('span', { class: store === 'walmart' ? 'wm' : 'ic', style: `height:${pct}%`, title: `${fmt(h.price)} — ${h.scraped_at.slice(0,10)}` });
-        bars.appendChild(bar);
-      });
-      row.appendChild(bars);
-      row.appendChild(el('div', { class: 'text-sm', style: 'margin-top:4px' },
-        `Latest: ${fmt(hist[hist.length-1].price)} · Lowest: ${fmt(Math.min(...hist.map(h => h.price)))}`));
+    p.history.slice(0, 12).forEach(h => {
+      const row = el('div', { class: 'result-item-row' });
+      const info = el('div', { class: 'result-item-info' });
+      info.appendChild(el('div', { class: 'result-item-name' }, storeDisplayLabel(h.store)));
+      info.appendChild(el('div', { class: 'result-item-query' },
+        `${sourceKindLabel(h.source_kind)} · ${confidenceLabel(h.confidence)} · ${(h.submitted_at || h.scraped_at || '').slice(0, 10)}`
+      ));
+      if (h.evidence_note) {
+        info.appendChild(el('div', { class: 'text-sm' }, h.evidence_note));
+      }
+      const price = el('div', { class: 'result-item-price' });
+      price.appendChild(el('div', { class: 'result-item-unit-price' }, fmt(h.price)));
+      row.append(info, price);
       histCard.appendChild(row);
     });
 
@@ -1273,29 +1323,44 @@ function renderNewListModal() {
 
 function renderAddProductModal() {
   const modal = el('div', { class: 'modal' });
-  modal.appendChild(el('h3', {}, 'Add Product'));
+  modal.appendChild(el('h3', {}, 'Add Product + Community Price'));
 
-  modal.appendChild(el('div', { class: 'section-title' }, 'Manual or receipt-verified price'));
+  modal.appendChild(el('div', { class: 'section-title' }, 'Manual or receipt-verified source'));
   modal.appendChild(el('p', { class: 'text-sm', style: 'margin-bottom:12px' },
-    'For stores without safe public APIs, add a user-submitted price and source note.'));
+    'For Costco, Trader Joe\'s, Aldi, and other stores without safe public APIs, add a community price with provenance.'));
 
   const nameF = makeField('Product Name *', 'text', 'e.g. Organic Whole Milk');
   const imageF = makeField('Image URL', 'url', 'https://...');
-  const wmUrlF = makeField('Source URL or note', 'text', 'e.g. receipt photo, Costco shelf tag');
-  const wmPriceF = makeField('Manual Price ($)', 'number', '0.00');
-  wmPriceF.input.step = '0.01'; wmPriceF.input.min = '0';
-  const icUrlF = makeField('Second Source URL or note', 'text', 'optional');
-  const icPriceF = makeField('Second Manual Price ($)', 'number', '0.00');
-  icPriceF.input.step = '0.01'; icPriceF.input.min = '0';
+  const sourceWrap = el('div', { class: 'field' });
+  sourceWrap.appendChild(el('label', {}, 'Store / Source'));
+  const sourceSelect = el('select', {});
+  [
+    ['costco', 'Costco'],
+    ['trader_joes', "Trader Joe's"],
+    ['aldi', 'Aldi'],
+    ['manual', 'Other / manual'],
+  ].forEach(([value, label]) => sourceSelect.appendChild(el('option', { value }, label)));
+  sourceWrap.appendChild(sourceSelect);
+
+  const kindWrap = el('div', { class: 'field' });
+  kindWrap.appendChild(el('label', {}, 'Evidence Type'));
+  const kindSelect = el('select', {});
+  [
+    ['receipt_verified', 'Receipt or shelf-tag verified'],
+    ['manual', 'Manual estimate'],
+  ].forEach(([value, label]) => kindSelect.appendChild(el('option', { value }, label)));
+  kindWrap.appendChild(kindSelect);
+
+  const priceF = makeField('Community Price ($)', 'number', '0.00');
+  priceF.input.step = '0.01'; priceF.input.min = '0';
+  const evidenceF = makeField('Evidence Note', 'text', 'e.g. receipt 2026-06-29, Costco shelf tag, friend submitted');
 
   const nameInput = nameF.input;
   const imageInput = imageF.input;
-  const wmUrlInput = wmUrlF.input;
-  const wmPriceInput = wmPriceF.input;
-  const icUrlInput = icUrlF.input;
-  const icPriceInput = icPriceF.input;
+  const priceInput = priceF.input;
+  const evidenceInput = evidenceF.input;
 
-  modal.append(nameF.wrap, imageF.wrap, wmUrlF.wrap, wmPriceF.wrap, icUrlF.wrap, icPriceF.wrap);
+  modal.append(nameF.wrap, imageF.wrap, sourceWrap, kindWrap, priceF.wrap, evidenceF.wrap);
 
   const errEl = el('div', { class: 'err' });
   modal.appendChild(errEl);
@@ -1318,12 +1383,21 @@ function renderAddProductModal() {
           body: {
             name: nameInput.value.trim(),
             image_url: imageInput.value || null,
-            walmart_url: wmUrlInput.value || null,
-            instacart_url: icUrlInput.value || null,
-            walmart_price: wmPriceInput.value ? +wmPriceInput.value : null,
-            instacart_price: icPriceInput.value ? +icPriceInput.value : null,
           },
         });
+
+        if (priceInput.value) {
+          await api(`/products/${product.id}/price`, {
+            method: 'POST',
+            body: {
+              store: sourceSelect.value,
+              price: +priceInput.value,
+              source_kind: kindSelect.value,
+              evidence_note: evidenceInput.value || null,
+            },
+          });
+          product.prices = await api(`/products/${product.id}`).then(p => p.prices);
+        }
 
         if (state.currentList) {
           const item = await api(`/lists/${state.currentList.id}/items`, {
@@ -1335,6 +1409,11 @@ function renderAddProductModal() {
             product_name: product.name,
             image_url: product.image_url,
             kroger_price: product.prices?.kroger?.price,
+            community_price: product.prices?.community?.price,
+            community_store: product.prices?.community?.store,
+            community_source_kind: product.prices?.community?.source_kind,
+            community_confidence: product.prices?.community?.confidence,
+            community_evidence_note: product.prices?.community?.evidence_note,
             walmart_price: product.prices?.walmart?.price,
             instacart_price: product.prices?.instacart?.price,
           });

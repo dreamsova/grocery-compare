@@ -13,6 +13,7 @@ The current public v1 uses the Kroger Product API for live Kroger-family store p
 - Product browsing by category and trending grocery items
 - Price history snapshots
 - Socket.IO hooks for realtime list updates
+- Price provenance: official API, manual community price, or receipt-verified price
 
 ## Live Demo
 
@@ -96,6 +97,48 @@ The interview-ready direction is not "scrape every grocery store." It is a multi
 - Store metadata: Google Places or retailer location APIs
 
 This makes the product more reliable and easier to explain than depending on brittle website scraping.
+
+## Data Trust Layer
+
+Every price snapshot can carry provenance fields:
+
+```text
+source_label
+source_kind
+confidence
+evidence_note
+submitted_by
+submitted_at
+```
+
+Examples:
+
+- `official_api`: fetched from the Kroger Product API, high confidence.
+- `receipt_verified`: submitted by a user with a receipt or shelf-tag note.
+- `manual`: user-submitted price without hard evidence yet.
+- `legacy`: older demo fields kept for backward compatibility.
+
+This lets the app support Costco, Trader Joe's, Aldi, and other stores without unsafe scraping. They can enter through community or receipt-verified prices while Kroger remains the official live API source.
+
+## Verification
+
+Syntax check:
+
+```bash
+npm run check
+```
+
+Smoke test a running local service:
+
+```bash
+npm run smoke
+```
+
+Smoke test the public demo, including Kroger compare:
+
+```bash
+SMOKE_BASE_URL=https://grocery-compare-outx.onrender.com SMOKE_COMPARE=true npm run smoke
+```
 
 ## Deployment Notes
 

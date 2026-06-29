@@ -7,20 +7,90 @@ import { searchProducts, findLocations } from '../kroger.js';
 const router = Router();
 router.use(requireAuth);
 
+const PRICE_FIELDS = `
+  price,
+  scraped_at,
+  store,
+  source_label,
+  source_kind,
+  confidence,
+  evidence_note,
+  submitted_at
+`;
+
+const SOURCE_META = {
+  kroger: { label: 'Kroger Product API', kind: 'official_api', confidence: 0.98 },
+  manual: { label: 'Manual community price', kind: 'manual', confidence: 0.7 },
+  aldi: { label: 'Aldi community price', kind: 'manual', confidence: 0.7 },
+  costco: { label: 'Costco community price', kind: 'manual', confidence: 0.7 },
+  trader_joes: { label: "Trader Joe's community price", kind: 'manual', confidence: 0.7 },
+  walmart: { label: 'Legacy Walmart price', kind: 'legacy', confidence: 0.55 },
+  instacart: { label: 'Legacy Instacart price', kind: 'legacy', confidence: 0.55 },
+};
+
+function sourceLabel(store) {
+  return SOURCE_META[store]?.label ?? store;
+}
+
+function normalizeSourceKind(store, requestedKind) {
+  if (store === 'kroger') return 'official_api';
+  if (requestedKind === 'receipt_verified') return 'receipt_verified';
+  if (requestedKind === 'manual') return 'manual';
+  return SOURCE_META[store]?.kind ?? 'manual';
+}
+
+function confidenceFor(kind, store) {
+  if (kind === 'official_api') return 0.98;
+  if (kind === 'receipt_verified') return 0.9;
+  if (kind === 'manual') return 0.7;
+  return SOURCE_META[store]?.confidence ?? 0.7;
+}
+
+function insertPriceSnapshot({
+  productId,
+  store,
+  price,
+  sourceKind,
+  evidenceNote = null,
+  submittedBy = null,
+  inStock = 1,
+}) {
+  const normalizedKind = normalizeSourceKind(store, sourceKind);
+  db.prepare(`INSERT INTO price_snapshots
+    (id, product_id, store, price, in_stock, source_label, source_kind, confidence, evidence_note, submitted_by, submitted_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
+  ).run(
+    nanoid(),
+    productId,
+    store,
+    +price,
+    inStock,
+    sourceLabel(store),
+    normalizedKind,
+    confidenceFor(normalizedKind, store),
+    evidenceNote,
+    submittedBy,
+  );
+}
+
+function latestPriceFor(productId, store) {
+  return db.prepare(
+    `SELECT ${PRICE_FIELDS} FROM price_snapshots
+     WHERE product_id = ? AND store = ? ORDER BY scraped_at DESC LIMIT 1`
+  ).get(productId, store) ?? null;
+}
+
 function latestPrices(productId) {
   return {
-    kroger: db.prepare(
-      `SELECT price, scraped_at FROM price_snapshots
-       WHERE product_id = ? AND store = 'kroger' ORDER BY scraped_at DESC LIMIT 1`
+    kroger: latestPriceFor(productId, 'kroger'),
+    community: db.prepare(
+      `SELECT ${PRICE_FIELDS} FROM price_snapshots
+       WHERE product_id = ?
+         AND store IN ('manual', 'aldi', 'costco', 'trader_joes')
+       ORDER BY scraped_at DESC LIMIT 1`
     ).get(productId) ?? null,
-    walmart: db.prepare(
-      `SELECT price, scraped_at FROM price_snapshots
-       WHERE product_id = ? AND store = 'walmart' ORDER BY scraped_at DESC LIMIT 1`
-    ).get(productId) ?? null,
-    instacart: db.prepare(
-      `SELECT price, scraped_at FROM price_snapshots
-       WHERE product_id = ? AND store = 'instacart' ORDER BY scraped_at DESC LIMIT 1`
-    ).get(productId) ?? null,
+    walmart: latestPriceFor(productId, 'walmart'),
+    instacart: latestPriceFor(productId, 'instacart'),
   };
 }
 
@@ -79,12 +149,22 @@ router.post('/', (req, res) => {
   ).run(id, name.trim(), image_url ?? null, walmart_url ?? null, instacart_url ?? null, req.user.userId);
 
   if (walmart_price) {
-    db.prepare('INSERT INTO price_snapshots (id, product_id, store, price) VALUES (?, ?, ?, ?)')
-      .run(nanoid(), id, 'walmart', +walmart_price);
+    insertPriceSnapshot({
+      productId: id,
+      store: 'walmart',
+      price: walmart_price,
+      sourceKind: 'legacy',
+      submittedBy: req.user.userId,
+    });
   }
   if (instacart_price) {
-    db.prepare('INSERT INTO price_snapshots (id, product_id, store, price) VALUES (?, ?, ?, ?)')
-      .run(nanoid(), id, 'instacart', +instacart_price);
+    insertPriceSnapshot({
+      productId: id,
+      store: 'instacart',
+      price: instacart_price,
+      sourceKind: 'legacy',
+      submittedBy: req.user.userId,
+    });
   }
 
   const product = db.prepare('SELECT * FROM products WHERE id = ?').get(id);
@@ -152,8 +232,13 @@ router.post('/:id/refresh', async (req, res) => {
       // Match by kroger productId stored in instacart_url field (temp reuse), or just take first
       const match = candidates[0];
       if (match?.price) {
-        db.prepare('INSERT INTO price_snapshots (id, product_id, store, price, in_stock) VALUES (?, ?, ?, ?, ?)')
-          .run(nanoid(), product.id, 'kroger', match.price, 1);
+        insertPriceSnapshot({
+          productId: product.id,
+          store: 'kroger',
+          price: match.price,
+          sourceKind: 'official_api',
+          inStock: 1,
+        });
         if (match.imageUrl && !product.image_url) {
           db.prepare('UPDATE products SET image_url = ? WHERE id = ?').run(match.imageUrl, product.id);
         }
@@ -169,15 +254,28 @@ router.post('/:id/refresh', async (req, res) => {
 
 // POST /api/products/:id/price — manually add a price
 router.post('/:id/price', (req, res) => {
-  const { store, price } = req.body;
+  const product = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
+  if (!product) return res.status(404).json({ error: 'Product not found' });
+
+  const { store, price, source_kind, evidence_note } = req.body;
   const supportedStores = ['kroger', 'manual', 'aldi', 'costco', 'trader_joes', 'walmart', 'instacart'];
   if (!supportedStores.includes(store)) {
     return res.status(400).json({ error: 'Unsupported store/source' });
   }
+  const supportedKinds = ['manual', 'receipt_verified', 'official_api', 'legacy'];
+  if (source_kind && !supportedKinds.includes(source_kind)) {
+    return res.status(400).json({ error: 'Unsupported source kind' });
+  }
   if (!price || isNaN(+price)) return res.status(400).json({ error: 'Valid price required' });
 
-  db.prepare('INSERT INTO price_snapshots (id, product_id, store, price) VALUES (?, ?, ?, ?)')
-    .run(nanoid(), req.params.id, store, +price);
+  insertPriceSnapshot({
+    productId: req.params.id,
+    store,
+    price,
+    sourceKind: source_kind,
+    evidenceNote: evidence_note?.trim() || null,
+    submittedBy: req.user.userId,
+  });
 
   res.json({ ok: true, prices: latestPrices(req.params.id) });
 });

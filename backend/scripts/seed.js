@@ -60,8 +60,18 @@ function addPrice(productId, store, price) {
     'SELECT id FROM price_snapshots WHERE product_id = ? AND store = ? AND price = ? LIMIT 1'
   ).get(productId, store, price);
   if (existing) return;
-  db.prepare(`INSERT INTO price_snapshots (id, product_id, store, price) VALUES (?, ?, ?, ?)`)
-    .run(nanoid(), productId, store, price);
+  db.prepare(`INSERT INTO price_snapshots
+    (id, product_id, store, price, source_label, source_kind, confidence, submitted_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`
+  ).run(
+    nanoid(),
+    productId,
+    store,
+    price,
+    store === 'kroger' ? 'Kroger Product API' : `${store} demo price`,
+    store === 'kroger' ? 'official_api' : 'manual',
+    store === 'kroger' ? 0.98 : 0.7,
+  );
 }
 
 export function seedDemoData() {

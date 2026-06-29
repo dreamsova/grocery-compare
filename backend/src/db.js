@@ -111,4 +111,55 @@ db.exec(`
   );
 `);
 
+function ensureColumn(table, column, definition) {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (columns.some(col => col.name === column)) return;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+
+ensureColumn('price_snapshots', 'source_label', 'TEXT');
+ensureColumn('price_snapshots', 'source_kind', 'TEXT');
+ensureColumn('price_snapshots', 'confidence', 'REAL');
+ensureColumn('price_snapshots', 'evidence_note', 'TEXT');
+ensureColumn('price_snapshots', 'submitted_by', 'TEXT');
+ensureColumn('price_snapshots', 'submitted_at', 'TEXT');
+
+db.exec(`
+  UPDATE price_snapshots
+  SET
+    source_label = COALESCE(source_label,
+      CASE store
+        WHEN 'kroger' THEN 'Kroger Product API'
+        WHEN 'costco' THEN 'Costco community price'
+        WHEN 'trader_joes' THEN 'Trader Joe''s community price'
+        WHEN 'aldi' THEN 'Aldi community price'
+        WHEN 'manual' THEN 'Manual community price'
+        WHEN 'walmart' THEN 'Legacy Walmart price'
+        WHEN 'instacart' THEN 'Legacy Instacart price'
+        ELSE store
+      END
+    ),
+    source_kind = COALESCE(source_kind,
+      CASE store
+        WHEN 'kroger' THEN 'official_api'
+        WHEN 'walmart' THEN 'legacy'
+        WHEN 'instacart' THEN 'legacy'
+        ELSE 'manual'
+      END
+    ),
+    confidence = COALESCE(confidence,
+      CASE store
+        WHEN 'kroger' THEN 0.98
+        WHEN 'walmart' THEN 0.55
+        WHEN 'instacart' THEN 0.55
+        ELSE 0.7
+      END
+    ),
+    submitted_at = COALESCE(submitted_at, scraped_at)
+  WHERE source_label IS NULL
+     OR source_kind IS NULL
+     OR confidence IS NULL
+     OR submitted_at IS NULL;
+`);
+
 export default db;

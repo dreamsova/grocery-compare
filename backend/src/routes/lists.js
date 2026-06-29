@@ -56,12 +56,42 @@ router.get('/:id', (req, res) => {
       (SELECT price FROM price_snapshots
        WHERE product_id = p.id AND store = 'kroger'
        ORDER BY scraped_at DESC LIMIT 1) AS kroger_price,
+      (SELECT source_kind FROM price_snapshots
+       WHERE product_id = p.id AND store = 'kroger'
+       ORDER BY scraped_at DESC LIMIT 1) AS kroger_source_kind,
+      (SELECT confidence FROM price_snapshots
+       WHERE product_id = p.id AND store = 'kroger'
+       ORDER BY scraped_at DESC LIMIT 1) AS kroger_confidence,
       (SELECT price FROM price_snapshots
        WHERE product_id = p.id AND store = 'walmart'
        ORDER BY scraped_at DESC LIMIT 1) AS walmart_price,
       (SELECT price FROM price_snapshots
        WHERE product_id = p.id AND store = 'instacart'
        ORDER BY scraped_at DESC LIMIT 1) AS instacart_price,
+      (SELECT price FROM price_snapshots
+       WHERE product_id = p.id
+         AND store IN ('manual', 'aldi', 'costco', 'trader_joes')
+       ORDER BY scraped_at DESC LIMIT 1) AS community_price,
+      (SELECT store FROM price_snapshots
+       WHERE product_id = p.id
+         AND store IN ('manual', 'aldi', 'costco', 'trader_joes')
+       ORDER BY scraped_at DESC LIMIT 1) AS community_store,
+      (SELECT source_label FROM price_snapshots
+       WHERE product_id = p.id
+         AND store IN ('manual', 'aldi', 'costco', 'trader_joes')
+       ORDER BY scraped_at DESC LIMIT 1) AS community_source_label,
+      (SELECT source_kind FROM price_snapshots
+       WHERE product_id = p.id
+         AND store IN ('manual', 'aldi', 'costco', 'trader_joes')
+       ORDER BY scraped_at DESC LIMIT 1) AS community_source_kind,
+      (SELECT confidence FROM price_snapshots
+       WHERE product_id = p.id
+         AND store IN ('manual', 'aldi', 'costco', 'trader_joes')
+       ORDER BY scraped_at DESC LIMIT 1) AS community_confidence,
+      (SELECT evidence_note FROM price_snapshots
+       WHERE product_id = p.id
+         AND store IN ('manual', 'aldi', 'costco', 'trader_joes')
+       ORDER BY scraped_at DESC LIMIT 1) AS community_evidence_note,
       (SELECT scraped_at FROM price_snapshots
        WHERE product_id = p.id
        ORDER BY scraped_at DESC LIMIT 1) AS last_updated

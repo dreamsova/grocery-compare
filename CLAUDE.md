@@ -4,6 +4,8 @@
 
 Grocery Compare helps shoppers compare a whole grocery list across nearby stores. The app should optimize for clear price provenance: where a price came from, when it was fetched, and how trustworthy it is.
 
+The product direction is a data-trust-first grocery comparison app: official APIs where possible, and community or receipt-verified prices where official APIs do not exist.
+
 ## Current Architecture
 
 - `backend/src/index.js`: Express entry point and Socket.IO setup
@@ -13,6 +15,7 @@ Grocery Compare helps shoppers compare a whole grocery list across nearby stores
 - `backend/src/dataSources`: normalized source adapters
 - `backend/src/db.js`: SQLite database setup
 - `backend/scripts/seed.js`: demo data
+- `backend/scripts/smoke.js`: post-deploy smoke test
 
 ## Commands
 
@@ -22,6 +25,7 @@ npm install
 npm run dev
 npm run seed
 npm run check
+SMOKE_BASE_URL=https://grocery-compare-outx.onrender.com SMOKE_COMPARE=true npm run smoke
 ```
 
 ## Environment
@@ -56,3 +60,12 @@ The project should be described as a multi-source grocery intelligence system:
 - Store distance and convenience signals
 - Whole-list optimization instead of one-item price comparison
 
+## Price Provenance
+
+`price_snapshots` supports:
+
+- `source_label`: human-readable source, e.g. Kroger Product API or Costco community price
+- `source_kind`: `official_api`, `receipt_verified`, `manual`, or `legacy`
+- `confidence`: trust score for display and ranking
+- `evidence_note`: optional receipt, shelf-tag, or manual note
+- `submitted_by` and `submitted_at`: who contributed the price and when
