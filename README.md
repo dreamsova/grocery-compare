@@ -14,6 +14,32 @@ The current public v1 uses the Kroger Product API for live Kroger-family store p
 - Price history snapshots
 - Socket.IO hooks for realtime list updates
 
+## Live Demo
+
+Public demo:
+
+```text
+https://grocery-compare-outx.onrender.com
+```
+
+Demo login:
+
+```text
+demo@grocerycompare.com / demo1234
+```
+
+## Interview Demo Script
+
+Use this flow for a quick product walkthrough:
+
+1. Open the public demo and click `Try Demo Account`.
+2. Explain the problem: grocery prices are local, store-specific, and hard to compare item by item.
+3. Open the `Compare` tab. The app starts with a realistic basket: eggs, milk, bread, bananas, and chicken.
+4. Run the comparison for ZIP code `60614`.
+5. Point out the result summary: cheapest store, potential savings, matched item count, and data source.
+6. Explain the architecture: Kroger prices come from an official API; stores without public APIs should use manual or receipt-verified community prices instead of brittle scraping.
+7. Mention the next production step: move demo SQLite data to Supabase/Postgres and add receipt upload verification.
+
 ## Tech Stack
 
 - Frontend: vanilla SPA served from Express
