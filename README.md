@@ -75,11 +75,10 @@ This makes the product more reliable and easier to explain than depending on bri
 
 The app is deployable as a single Node service. Use a persistent disk for SQLite if deploying to Render/Railway, or migrate the database to Supabase/Postgres for a production-grade version.
 
-For Render, this repo includes [render.yaml](render.yaml). Add environment variables in the Render dashboard instead of committing secrets.
+For Render, this repo includes [render.yaml](render.yaml). Add environment variables in the Render dashboard instead of committing secrets. See [DEPLOYMENT.md](DEPLOYMENT.md) for the full deployment checklist.
 
 ## Security Notes
 
 - `.env`, SQLite database files, local browser captures, and agent cache files are ignored by Git.
 - Kroger credentials are used server-side only.
 - Public deployments should set a strong `JWT_SECRET`, restrict CORS origins, and add rate limiting before real users.
-

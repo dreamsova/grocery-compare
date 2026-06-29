@@ -6,8 +6,7 @@
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
     "seed": "node scripts/seed.js",
-    "check": "node --check src/index.js && node --check src/db.js && node --check src/kroger.js && node --check src/dataSources/index.js && node --check src/dataSources/krogerSource.js && node --check src/routes/auth.js && node --check src/routes/lists.js && node --check src/routes/products.js && node --check src/routes/compare.js && node --check src/routes/browse.js && node --check scripts/seed.js",
-    "install-browsers": "playwright install chromium"
+    "check": "node --check src/index.js && node --check src/db.js && node --check src/kroger.js && node --check src/dataSources/index.js && node --check src/dataSources/krogerSource.js && node --check src/routes/auth.js && node --check src/routes/lists.js && node --check src/routes/products.js && node --check src/routes/compare.js && node --check src/routes/browse.js && node --check scripts/seed.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -18,9 +17,6 @@
     "jsonwebtoken": "^9.0.2",
     "nanoid": "^5.0.6",
     "node-sqlite3-wasm": "^0.8.2",
-    "playwright": "^1.42.1",
-    "playwright-extra": "^4.3.6",
-    "playwright-extra-plugin-stealth": "^0.0.1",
     "socket.io": "^4.7.4"
   }
 }

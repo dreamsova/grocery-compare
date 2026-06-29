@@ -13,6 +13,7 @@ import listsRouter from './routes/lists.js';
 import productsRouter from './routes/products.js';
 import compareRouter from './routes/compare.js';
 import browseRouter from './routes/browse.js';
+import { seedDemoData } from '../scripts/seed.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -100,6 +101,11 @@ io.on('connection', (socket) => {
 export { io };
 
 const PORT = process.env.PORT || 3001;
+
+if (process.env.SEED_DEMO_DATA === 'true') {
+  seedDemoData();
+}
+
 httpServer.listen(PORT, () => {
   console.log(`\n  Grocery Compare running at http://localhost:${PORT}\n`);
 });

@@ -5,9 +5,12 @@ services:
     rootDir: backend
     buildCommand: npm install
     startCommand: npm start
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
+      - key: SEED_DEMO_DATA
+        value: true
       - key: JWT_SECRET
         sync: false
       - key: KROGER_CLIENT_ID
