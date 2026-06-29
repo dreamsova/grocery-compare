@@ -6,8 +6,10 @@ This project is deployable as one full-stack Node service: Express serves both t
 
 - GitHub hosts the source code.
 - Render runs the Node/Express app.
-- A Render persistent disk stores the SQLite database at `/data/grocery.db`.
+- The free demo stores SQLite at `/tmp/grocery.db` and seeds sample data on startup.
 - Kroger live product data is fetched server-side with Kroger API credentials.
+
+This free setup is intentionally demo-first. Data can reset when Render restarts or redeploys the service. For durable production data, migrate to Supabase/Postgres or use a paid Render service with a persistent disk.
 
 ## Deploy on Render
 
