@@ -37,6 +37,7 @@ tmp/
 .report_build/
 
 # Legacy prototypes / abandoned scraping experiments
+/HANDOFF.md
 /index.html
 /walmart.js
 backend/src/scrapers/
