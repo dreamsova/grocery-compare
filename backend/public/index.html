@@ -253,11 +253,17 @@
     .source-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
       gap: 10px; margin-bottom: 16px; }
     .source-card { background: var(--card); border: 1px solid var(--border);
-      border-radius: 16px; padding: 14px; box-shadow: var(--shadow); }
+      border-radius: 16px; padding: 14px; box-shadow: var(--shadow); cursor: pointer;
+      transition: transform .15s, border-color .15s, box-shadow .15s; color: inherit;
+      font: inherit; }
+    .source-card:hover { transform: translateY(-2px); border-color: #c7b68f;
+      box-shadow: 0 16px 38px rgba(63,43,20,.12); }
     .source-card-top { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start;
       margin-bottom: 7px; }
     .source-name { font-weight: 850; letter-spacing: -.03em; }
     .source-role { color: var(--muted); font-size: .78rem; line-height: 1.35; }
+    .source-card-cta { color: var(--orange); font-size: .7rem; font-weight: 850;
+      text-transform: uppercase; letter-spacing: .06em; margin-top: 10px; }
     .source-status { border-radius: 999px; padding: 3px 7px; font-size: .62rem;
       font-weight: 850; text-transform: uppercase; white-space: nowrap; }
     .source-status.ok { background: #dcfce7; color: #166534; }
@@ -436,8 +442,11 @@ const state = {
   currentProduct: null,
   currentCategory: null,
   profileOpen: false,
-  modal: null,         // null | 'add-product' | 'new-list' | 'invite' | 'add-to-list'
+  modal: null,         // null | 'add-product' | 'new-list' | 'invite' | 'add-to-list' | 'source-detail'
   pendingAddProduct: null,
+  selectedSource: null,
+  sourceSearchQuery: 'whole milk',
+  sourceSearchResults: null,
   socket: null,
   _subs: [],
   zipCode: '60614',
@@ -849,7 +858,16 @@ function renderDataSourcesPanel() {
 
     sources.forEach(source => {
       const configured = source.configured !== false;
-      const card = el('div', { class: 'source-card' });
+      const card = el('button', {
+        class: 'source-card',
+        onclick: () => {
+          state.selectedSource = source;
+          state.sourceSearchResults = null;
+          state.modal = 'source-detail';
+          renderCurrentView();
+        },
+        style: 'text-align:left;width:100%',
+      });
       const top = el('div', { class: 'source-card-top' });
       top.appendChild(el('div', { class: 'source-name' }, source.label));
       top.appendChild(el('span', {
@@ -861,6 +879,7 @@ function renderDataSourcesPanel() {
         el('span', { class: 'confidence-dot' }, sourceKindLabel(source.kind)),
         el('span', { class: 'confidence-dot' }, source.trust || 'Source')
       ));
+      card.appendChild(el('div', { class: 'source-card-cta' }, 'View details ->'));
       grid.appendChild(card);
     });
   }
@@ -1450,9 +1469,173 @@ function renderModal() {
   else if (state.modal === 'add-product') content = renderAddProductModal();
   else if (state.modal === 'invite') content = renderInviteModal();
   else if (state.modal === 'add-to-list') content = renderAddToListModal();
+  else if (state.modal === 'source-detail') content = renderSourceDetailModal();
 
   if (content) overlay.appendChild(content);
   return overlay;
+}
+
+function renderSourceDetailModal() {
+  const source = state.selectedSource;
+  const modal = el('div', { class: 'modal' });
+  if (!source) {
+    modal.appendChild(el('h3', {}, 'Data Source'));
+    modal.appendChild(el('p', { class: 'text-sm' }, 'No source selected.'));
+    return modal;
+  }
+
+  const configured = source.configured !== false;
+  modal.appendChild(el('h3', {}, source.label));
+  modal.appendChild(el('p', { class: 'text-sm', style: 'margin-bottom:12px' }, source.role || sourceKindLabel(source.kind)));
+
+  const facts = el('div', { class: 'card', style: 'box-shadow:none;margin-bottom:12px' });
+  facts.appendChild(feeRow('Status', configured ? 'Active' : 'Needs server key'));
+  facts.appendChild(feeRow('Source Type', sourceKindLabel(source.kind)));
+  facts.appendChild(feeRow('Trust Model', source.trust || 'Source registry'));
+  facts.appendChild(feeRow('Requires Key', source.requiresKey ? 'Yes, server-only' : 'No'));
+  if (source.credentialMode) facts.appendChild(feeRow('Credential Mode', source.credentialMode));
+  modal.appendChild(facts);
+
+  modal.appendChild(el('div', { class: 'section-title' }, 'How this source is used'));
+  modal.appendChild(el('p', { class: 'text-sm', style: 'margin-bottom:12px' }, sourceUsageCopy(source)));
+
+  if (source.id === 'open_food_facts' || source.id === 'usda_fdc') {
+    modal.appendChild(renderSourceSearchBox(source));
+  } else if (source.id === 'kroger') {
+    modal.appendChild(el('button', {
+      class: 'btn btn-primary btn-full',
+      onclick: () => {
+        state.modal = null;
+        state.selectedSource = null;
+        state.sourceSearchResults = null;
+        navigate('compare');
+      },
+    }, 'Open Basket Compare'));
+  } else if (source.id === 'community_prices') {
+    modal.appendChild(el('div', { class: 'demo-callout' },
+      'Open any shopping list, click + Add, then enter a Costco, Trader Joe’s, Aldi, or manual price with receipt/shelf-tag evidence.'
+    ));
+  }
+
+  const footer = el('div', { class: 'modal-footer' });
+  footer.appendChild(el('button', {
+    class: 'btn btn-secondary',
+    onclick: () => {
+      state.modal = null;
+      state.selectedSource = null;
+      state.sourceSearchResults = null;
+      renderCurrentView();
+    },
+  }, 'Close'));
+  modal.appendChild(footer);
+  return modal;
+}
+
+function renderSourceSearchBox(source) {
+  const wrap = el('div', {});
+  const queryF = makeField('Sample Query', 'text', 'whole milk');
+  queryF.input.value = state.sourceSearchQuery || 'whole milk';
+  queryF.input.oninput = () => { state.sourceSearchQuery = queryF.input.value; };
+  wrap.appendChild(queryF.wrap);
+
+  const errEl = el('div', { class: 'err' });
+  const searchBtn = el('button', {
+    class: 'btn btn-primary btn-full',
+    onclick: async () => {
+      const query = queryF.input.value.trim();
+      if (!query) { errEl.textContent = 'Enter a sample query'; return; }
+      state.sourceSearchQuery = query;
+      state.sourceSearchResults = { loading: true };
+      renderCurrentView();
+      try {
+        state.sourceSearchResults = await api(`/sources/search?q=${encodeURIComponent(query)}&limit=3`);
+      } catch (e) {
+        state.sourceSearchResults = { error: e.message };
+      }
+      renderCurrentView();
+    },
+  }, 'Run Source Test');
+  wrap.appendChild(searchBtn);
+  wrap.appendChild(errEl);
+
+  const result = state.sourceSearchResults;
+  if (result?.loading) {
+    wrap.appendChild(el('div', { class: 'card', style: 'box-shadow:none;margin-top:12px' },
+      el('span', { class: 'spinner' }),
+      el('span', { class: 'text-sm', style: 'margin-left:8px' }, 'Searching open data sources...')
+    ));
+  } else if (result?.error) {
+    wrap.appendChild(el('div', { class: 'err', style: 'margin-top:10px' }, result.error));
+  } else if (result?.sources) {
+    const sourceResult = result.sources.find(item => item.id === source.id);
+    wrap.appendChild(renderSourceSearchResult(sourceResult));
+  }
+
+  return wrap;
+}
+
+function renderSourceSearchResult(sourceResult) {
+  const card = el('div', { class: 'card', style: 'box-shadow:none;margin-top:12px' });
+  if (!sourceResult) {
+    card.appendChild(el('div', { class: 'text-sm' }, 'This source did not return a response for the query.'));
+    return card;
+  }
+
+  const status = el('div', { class: 'source-card-top' });
+  status.appendChild(el('div', { class: 'source-name' }, `${sourceResult.label} response`));
+  status.appendChild(el('span', {
+    class: 'source-status ' + (sourceResult.status === 'ok' ? 'ok' : sourceResult.status === 'empty' ? 'warn' : 'error'),
+  }, sourceResult.status));
+  card.appendChild(status);
+
+  if (sourceResult.error) {
+    card.appendChild(el('div', { class: 'err' }, sourceResult.error));
+    return card;
+  }
+  if (!sourceResult.matches?.length) {
+    card.appendChild(el('div', { class: 'text-sm' }, 'No matches returned for this query.'));
+    return card;
+  }
+
+  sourceResult.matches.slice(0, 3).forEach(match => {
+    const row = el('div', { class: 'result-item-row' });
+    if (match.imageUrl) {
+      const img = el('img', { class: 'result-item-img', src: match.imageUrl, alt: match.productName || '' });
+      img.onerror = () => img.replaceWith(el('div', { class: 'result-item-img-ph' }, '🛒'));
+      row.appendChild(img);
+    } else {
+      row.appendChild(el('div', { class: 'result-item-img-ph' }, '🛒'));
+    }
+    const info = el('div', { class: 'result-item-info' });
+    info.appendChild(el('div', { class: 'result-item-name' }, match.productName || 'Unnamed product'));
+    info.appendChild(el('div', { class: 'result-item-query' },
+      [match.brand, match.size, match.barcode ? `UPC ${match.barcode}` : null].filter(Boolean).join(' · ') || 'Open data match'
+    ));
+    info.appendChild(el('div', { class: 'result-item-source' },
+      el('span', { class: 'confidence-dot' }, confidenceLabel(match.confidence)),
+      ...(match.badges || []).slice(0, 2).map(badge => el('span', { class: 'confidence-dot' }, badge))
+    ));
+    row.appendChild(info);
+    card.appendChild(row);
+  });
+
+  return card;
+}
+
+function sourceUsageCopy(source) {
+  if (source.id === 'kroger') {
+    return 'Used for live local prices and whole-basket comparison across nearby Kroger-family stores.';
+  }
+  if (source.id === 'community_prices') {
+    return 'Used for stores that do not offer safe public APIs. Prices enter through manual or receipt-verified submissions with confidence scoring.';
+  }
+  if (source.id === 'open_food_facts') {
+    return 'Used to enrich packaged products with brand, UPC, package photos, labels, and nutrition-label data.';
+  }
+  if (source.id === 'usda_fdc') {
+    return 'Used to enrich products with standardized government nutrition data for a more reliable food profile.';
+  }
+  return 'Used as part of the product data-source registry.';
 }
 
 function renderNewListModal() {
