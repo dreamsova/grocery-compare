@@ -14,6 +14,7 @@ import productsRouter from './routes/products.js';
 import compareRouter from './routes/compare.js';
 import browseRouter from './routes/browse.js';
 import sourcesRouter from './routes/sources.js';
+import systemRouter from './routes/system.js';
 import { seedDemoData } from '../scripts/seed.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -51,6 +52,7 @@ app.use('/api/products', productsRouter);
 app.use('/api/compare', compareRouter);
 app.use('/api/browse', browseRouter);
 app.use('/api/sources', sourcesRouter);
+app.use('/api/system', systemRouter);
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 

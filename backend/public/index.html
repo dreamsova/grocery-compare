@@ -269,6 +269,17 @@
     .source-status.ok { background: #dcfce7; color: #166534; }
     .source-status.warn { background: #fff7ed; color: #c2410c; }
     .source-status.error { background: #fee2e2; color: #991b1b; }
+    .readiness-card { background: #18251d; color: #fbfcf7; border-radius: 20px;
+      padding: 18px; margin-bottom: 16px; box-shadow: var(--shadow); }
+    .readiness-card .section-title { color: rgba(251,252,247,.68); }
+    .readiness-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    @media (max-width: 760px) { .readiness-grid { grid-template-columns: 1fr; } }
+    .readiness-metric { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12);
+      border-radius: 14px; padding: 12px; }
+    .readiness-label { font-size: .68rem; text-transform: uppercase; letter-spacing: .08em;
+      color: rgba(251,252,247,.62); margin-bottom: 4px; font-weight: 850; }
+    .readiness-value { font-weight: 850; font-size: .96rem; }
+    .readiness-note { color: rgba(251,252,247,.72); font-size: .78rem; line-height: 1.45; margin-top: 10px; }
     .metadata-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       gap: 10px; margin-bottom: 16px; }
     .metric-card { background: var(--card); border: 1px solid var(--border);
@@ -465,6 +476,7 @@ const state = {
   zipCode: '60614',
   homeData: null,
   sourceStatus: null,
+  systemStatus: null,
 };
 
 let accessToken = null;   // kept in memory (cookie is httpOnly fallback for SSR)
@@ -866,6 +878,61 @@ function makeField(label, type, placeholder) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Dashboard
 // ─────────────────────────────────────────────────────────────────────────────
+function renderProductionReadinessPanel() {
+  const section = el('div', { class: 'readiness-card' });
+  section.appendChild(el('div', { class: 'section-title' }, 'Production Readiness'));
+
+  const status = state.systemStatus;
+  if (!status) {
+    section.appendChild(el('div', { class: 'readiness-note' }, 'Checking persistence and storage configuration...'));
+    api('/system/status')
+      .then(data => {
+        state.systemStatus = data;
+        if (state.view === 'dashboard') renderCurrentView();
+      })
+      .catch(() => {
+        state.systemStatus = { error: true };
+        if (state.view === 'dashboard') renderCurrentView();
+      });
+    return section;
+  }
+
+  if (status.error) {
+    section.appendChild(el('div', { class: 'readiness-note' }, 'Could not load system status.'));
+    return section;
+  }
+
+  const grid = el('div', { class: 'readiness-grid' });
+  grid.appendChild(readinessMetric(
+    'Current DB',
+    status.persistence?.active === 'sqlite' ? 'SQLite demo' : status.persistence?.active,
+    status.persistence?.ephemeral ? 'Ephemeral on Render free storage' : 'Local or persistent file'
+  ));
+  grid.appendChild(readinessMetric(
+    'Production DB',
+    status.persistence?.postgresConfigured ? 'Postgres configured' : 'Supabase pending',
+    status.persistence?.productionTarget || 'supabase_postgres'
+  ));
+  grid.appendChild(readinessMetric(
+    'Receipt Files',
+    status.receiptStorage?.supabaseStorageConfigured ? 'Storage configured' : 'SQLite evidence',
+    status.receiptStorage?.supabaseStorageConfigured ? 'Supabase Storage ready' : 'Demo stores small images in DB'
+  ));
+  section.appendChild(grid);
+  section.appendChild(el('div', { class: 'readiness-note' },
+    status.readiness?.nextStep || 'Add Supabase credentials to switch from demo persistence to production persistence.'
+  ));
+  return section;
+}
+
+function readinessMetric(label, value, note) {
+  return el('div', { class: 'readiness-metric' },
+    el('div', { class: 'readiness-label' }, label),
+    el('div', { class: 'readiness-value' }, value || 'Unknown'),
+    el('div', { class: 'readiness-note', style: 'margin-top:5px' }, note || '')
+  );
+}
+
 function renderDataSourcesPanel() {
   const section = el('div', {});
   const titleRow = el('div', { class: 'flex', style: 'margin-bottom:10px;align-items:center' });
@@ -944,6 +1011,7 @@ function renderDashboard() {
   const heroBtn = el('button', { class: 'btn', style: 'margin-top:14px;background:#fff;color:#1a1a1a;font-weight:700' }, 'Start Comparing →');
   hero.appendChild(heroBtn);
   wrap.appendChild(hero);
+  wrap.appendChild(renderProductionReadinessPanel());
   wrap.appendChild(renderDataSourcesPanel());
 
   const hdr = el('div', { class: 'flex', style: 'margin-bottom:16px' });

@@ -14,6 +14,7 @@ The product direction is a data-trust-first grocery comparison app: official API
 - `backend/src/kroger.js`: Kroger API client
 - `backend/src/dataSources`: normalized source adapters for Kroger, Open Food Facts, USDA, and product enrichment
 - `backend/src/db.js`: SQLite database setup
+- `backend/src/routes/system.js`: persistence/storage readiness endpoint
 - `backend/scripts/seed.js`: demo data
 - `backend/scripts/smoke.js`: post-deploy smoke test
 - `supabase/schema.sql`: production Postgres schema target
@@ -97,3 +98,5 @@ The demo stores small PNG/JPG/WEBP images as base64 in SQLite so the feature wor
 ## UI Direction
 
 Keep the interface simple, readable, and product-focused. Avoid oversized marketing typography. The landing page should explain the product in one glance: compare grocery baskets, inspect source-backed prices, upload receipt evidence, and enrich products from open data.
+
+The dashboard should show production readiness clearly: current SQLite demo storage, Supabase/Postgres target, and receipt storage status.

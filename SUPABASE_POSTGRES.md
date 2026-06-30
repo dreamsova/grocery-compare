@@ -30,6 +30,8 @@ The schema is production-ready, but the Express routes still use the synchronous
 
 For the current public demo, receipt images are stored in SQLite as base64 evidence so the feature works immediately. In production, store the image file in Supabase Storage and keep only `storage_path` plus metadata in `receipt_images`.
 
+The app exposes `/api/system/status` and shows a Production Readiness card in the dashboard so the running product can explain whether it is in SQLite demo mode or Supabase/Postgres production mode.
+
 ## Migration Plan
 
 1. Add a repository layer with methods such as `getProduct`, `createProduct`, `listReceipts`, and `insertReceipt`.

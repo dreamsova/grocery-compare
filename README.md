@@ -116,6 +116,17 @@ This makes the product more reliable and easier to explain than depending on bri
 
 The `/api/sources` endpoint exposes the source registry used by the UI. Product detail pages can call `/api/products/:id/enrich` to fetch and cache metadata from open sources.
 
+## SQLite vs Supabase
+
+The current demo uses SQLite because it is simple, local, and easy to ship as one Express service. SQLite is a database engine that stores data in a file, which is great for development and portfolio demos.
+
+Supabase is a managed backend platform built around Postgres. It gives the app durable cloud storage, SQL, auth options, storage buckets for receipt images, logs, API access, and security policies. In production, Supabase/Postgres should replace the demo SQLite file so user data survives restarts and deploys.
+
+In short:
+
+- SQLite: simple file database, best for local/demo mode.
+- Supabase/Postgres: hosted production database and storage platform, best for real users.
+
 ## Data Trust Layer
 
 Every price snapshot can carry provenance fields:

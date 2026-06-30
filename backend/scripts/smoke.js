@@ -55,6 +55,10 @@ async function main() {
   }
   console.log(`sources ok: ${sourceIds.join(', ')}`);
 
+  const system = await request('/api/system/status');
+  if (system.body.persistence?.active !== 'sqlite') throw new Error('Unexpected persistence adapter');
+  console.log(`system ok: ${system.body.persistence.active}, target ${system.body.persistence.productionTarget}`);
+
   if (runCompare) {
     const compare = await request('/api/compare', {
       method: 'POST',
