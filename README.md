@@ -43,16 +43,16 @@ Use this flow for a quick product walkthrough:
 6. Open a product and click `Enrich Data` to show Open Food Facts / USDA metadata and nutrition.
 7. Upload a receipt image on a product to show evidence-backed community prices.
 8. Explain the architecture: Kroger prices come from an official API; stores without public APIs should use manual or receipt-verified community prices instead of brittle scraping.
-9. Mention the production persistence path: run `supabase/schema.sql`, move receipt files to Supabase Storage, then replace the SQLite adapter with a Postgres repository layer.
+9. Mention the production persistence path: local mode uses SQLite; production switches to Supabase/Postgres plus Supabase Storage when the Render env vars are configured.
 
 ## Tech Stack
 
 - Frontend: vanilla SPA served from Express
 - Backend: Node.js, Express, Socket.IO
-- Database: SQLite via `node-sqlite3-wasm`
+- Database: SQLite locally, Supabase/Postgres in production via `DATABASE_URL`
 - External APIs: Kroger Product API, Open Food Facts, USDA FoodData Central
 - Deployment target: Render or Railway for the current Express app
-- Production persistence target: Supabase/Postgres, with schema in [supabase/schema.sql](supabase/schema.sql)
+- Receipt storage: SQLite base64 locally, private Supabase Storage bucket in production
 
 ## Local Setup
 
@@ -118,9 +118,9 @@ The `/api/sources` endpoint exposes the source registry used by the UI. Product 
 
 ## SQLite vs Supabase
 
-The current demo uses SQLite because it is simple, local, and easy to ship as one Express service. SQLite is a database engine that stores data in a file, which is great for development and portfolio demos.
+The app uses SQLite by default because it is simple, local, and easy to ship as one Express service. SQLite is a database engine that stores data in a file, which is great for development and portfolio demos.
 
-Supabase is a managed backend platform built around Postgres. It gives the app durable cloud storage, SQL, auth options, storage buckets for receipt images, logs, API access, and security policies. In production, Supabase/Postgres should replace the demo SQLite file so user data survives restarts and deploys.
+Supabase is a managed backend platform built around Postgres. It gives the app durable cloud storage, SQL, auth options, storage buckets for receipt images, logs, API access, and security policies. In production, setting `DATABASE_URL` switches the app to Supabase/Postgres so user data survives restarts and deploys.
 
 In short:
 
@@ -149,7 +149,7 @@ Examples:
 
 This lets the app support Costco, Trader Joe's, Aldi, and other stores without unsafe scraping. They can enter through community or receipt-verified prices while Kroger remains the official live API source.
 
-Receipt images are available as an additional evidence layer. The demo stores small receipt images in SQLite so it works immediately. Production should store image files in Supabase Storage and keep `storage_path` metadata in Postgres.
+Receipt images are available as an additional evidence layer. Local mode stores small receipt images in SQLite so the feature works immediately. Production stores image files in a private Supabase Storage bucket and keeps `storage_path` metadata in Postgres.
 
 ## Verification
 
@@ -171,9 +171,18 @@ Smoke test the public demo, including Kroger compare:
 SMOKE_BASE_URL=https://grocery-compare-outx.onrender.com SMOKE_COMPARE=true npm run smoke
 ```
 
+Smoke test a Supabase-backed deployment:
+
+```bash
+SMOKE_BASE_URL=https://grocery-compare-outx.onrender.com \
+SMOKE_EXPECT_PERSISTENCE=postgres \
+SMOKE_EXPECT_RECEIPT_STORAGE=supabase_storage \
+npm run smoke
+```
+
 ## Deployment Notes
 
-The app is deployable as a single Node service. Use a persistent disk for SQLite if deploying to Render/Railway, or migrate the database to Supabase/Postgres for a production-grade version.
+The app is deployable as a single Node service. Without `DATABASE_URL`, it uses SQLite. With `DATABASE_URL` plus Supabase server-side keys, it uses Supabase/Postgres and private Supabase Storage for receipt evidence.
 
 For Render, this repo includes [render.yaml](render.yaml). Add environment variables in the Render dashboard instead of committing secrets. See [DEPLOYMENT.md](DEPLOYMENT.md) for the full deployment checklist.
 

@@ -6,10 +6,11 @@ This project is deployable as one full-stack Node service: Express serves both t
 
 - GitHub hosts the source code.
 - Render runs the Node/Express app.
-- The free demo stores SQLite at `/tmp/grocery.db` and seeds sample data on startup.
+- Without Supabase env vars, the free demo stores SQLite at `/tmp/grocery.db` and seeds sample data on startup.
+- With Supabase env vars, the service uses Supabase/Postgres and the private `receipts` Storage bucket.
 - Kroger live product data is fetched server-side with Kroger API credentials.
 
-This free setup is intentionally demo-first. Data can reset when Render restarts or redeploys the service. For durable production data, migrate to Supabase/Postgres or use a paid Render service with a persistent disk.
+The SQLite setup is intentionally demo-first. Data can reset when Render restarts or redeploys the service. For durable production data, configure Supabase/Postgres or use a paid Render service with a persistent disk.
 
 ## Deploy on Render
 
@@ -26,6 +27,15 @@ JWT_SECRET
 KROGER_CLIENT_ID
 KROGER_CLIENT_SECRET
 CORS_ORIGIN
+```
+
+Supabase production variables:
+
+```text
+DATABASE_URL
+SUPABASE_URL
+SUPABASE_SERVICE_ROLE_KEY
+SUPABASE_STORAGE_BUCKET=receipts
 ```
 
 Recommended values:
@@ -69,6 +79,15 @@ Then test the product flow:
 4. Compare the list across stores.
 5. Add a manual or receipt-verified price.
 
+For Supabase-backed deploys, also check:
+
+```bash
+SMOKE_BASE_URL=https://<your-render-service>.onrender.com \
+SMOKE_EXPECT_PERSISTENCE=postgres \
+SMOKE_EXPECT_RECEIPT_STORAGE=supabase_storage \
+npm run smoke
+```
+
 ## Security Checklist
 
 - Never commit `backend/.env`.
@@ -77,11 +96,11 @@ Then test the product flow:
 - Keep Kroger credentials server-side only.
 - Rotate credentials if they were ever shared in a PDF, screenshot, chat, or public repo.
 
-## Future Production Upgrade
+## Production Hardening
 
-For a larger public product, migrate SQLite to Supabase/Postgres and add:
+For a larger public product, add:
 
 - Row-level security for per-user data.
 - Rate limiting on auth and search routes.
 - More durable background jobs for scheduled price refreshes.
-- Receipt upload or user-submitted price verification.
+- A moderation flow for receipt upload or user-submitted price verification.

@@ -6,18 +6,21 @@
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
     "seed": "node scripts/seed.js",
-    "check": "node --check src/index.js && node --check src/db.js && node --check src/kroger.js && node --check src/dataSources/index.js && node --check src/dataSources/krogerSource.js && node --check src/dataSources/openFoodFactsSource.js && node --check src/dataSources/usdaSource.js && node --check src/dataSources/productEnrichment.js && node --check src/routes/auth.js && node --check src/routes/lists.js && node --check src/routes/products.js && node --check src/routes/compare.js && node --check src/routes/browse.js && node --check src/routes/sources.js && node --check src/routes/system.js && node --check scripts/seed.js && node --check scripts/smoke.js",
+    "check": "node --check src/index.js && node --check src/db.js && node --check src/kroger.js && node --check src/storage/receipts.js && node --check src/dataSources/index.js && node --check src/dataSources/krogerSource.js && node --check src/dataSources/openFoodFactsSource.js && node --check src/dataSources/usdaSource.js && node --check src/dataSources/productEnrichment.js && node --check src/routes/auth.js && node --check src/routes/lists.js && node --check src/routes/products.js && node --check src/routes/compare.js && node --check src/routes/browse.js && node --check src/routes/sources.js && node --check src/routes/system.js && node --check scripts/seed.js && node --check scripts/smoke.js",
     "smoke": "node scripts/smoke.js"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.110.0",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.18.3",
+    "express-async-errors": "^3.1.1",
     "jsonwebtoken": "^9.0.2",
     "nanoid": "^5.0.6",
     "node-sqlite3-wasm": "^0.8.2",
+    "pg": "^8.22.0",
     "socket.io": "^4.7.4"
   }
 }

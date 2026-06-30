@@ -2,6 +2,8 @@ const baseUrl = (process.env.SMOKE_BASE_URL || 'http://localhost:3001').replace(
 const email = process.env.SMOKE_EMAIL || 'demo@grocerycompare.com';
 const password = process.env.SMOKE_PASSWORD || 'demo1234';
 const runCompare = process.env.SMOKE_COMPARE === 'true';
+const expectedPersistence = process.env.SMOKE_EXPECT_PERSISTENCE;
+const expectedReceiptStorage = process.env.SMOKE_EXPECT_RECEIPT_STORAGE;
 
 async function request(path, options = {}) {
   const res = await fetch(baseUrl + path, {
@@ -56,8 +58,13 @@ async function main() {
   console.log(`sources ok: ${sourceIds.join(', ')}`);
 
   const system = await request('/api/system/status');
-  if (system.body.persistence?.active !== 'sqlite') throw new Error('Unexpected persistence adapter');
-  console.log(`system ok: ${system.body.persistence.active}, target ${system.body.persistence.productionTarget}`);
+  if (expectedPersistence && system.body.persistence?.active !== expectedPersistence) {
+    throw new Error(`Expected persistence adapter ${expectedPersistence}, got ${system.body.persistence?.active}`);
+  }
+  if (expectedReceiptStorage && system.body.receiptStorage?.active !== expectedReceiptStorage) {
+    throw new Error(`Expected receipt storage ${expectedReceiptStorage}, got ${system.body.receiptStorage?.active}`);
+  }
+  console.log(`system ok: ${system.body.persistence.active}, receipts ${system.body.receiptStorage.active}`);
 
   if (runCompare) {
     const compare = await request('/api/compare', {

@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import 'express-async-errors';
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
@@ -61,6 +62,11 @@ app.get(/^(?!\/api).*/, (_req, res) => {
   res.sendFile(join(__dirname, '..', 'public', 'index.html'));
 });
 
+app.use((err, _req, res, _next) => {
+  console.error(err);
+  res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
+});
+
 // ── Socket.IO ────────────────────────────────────────────────────────────────
 // Authenticate on connection
 io.use((socket, next) => {
@@ -107,7 +113,7 @@ export { io };
 const PORT = process.env.PORT || 3001;
 
 if (process.env.SEED_DEMO_DATA === 'true') {
-  seedDemoData();
+  await seedDemoData();
 }
 
 httpServer.listen(PORT, () => {

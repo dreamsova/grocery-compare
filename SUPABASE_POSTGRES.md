@@ -1,6 +1,11 @@
 # Supabase / Postgres Persistence
 
-This repo is currently runnable as a single Express service with SQLite for local and demo deployments. The production persistence target is Supabase Postgres.
+This repo runs as a single Express service with a selectable persistence layer:
+
+- Local/default: SQLite file storage for fast demos.
+- Production: Supabase Postgres when `DATABASE_URL` is configured.
+
+Receipt images also switch automatically: local/default stores small images as SQLite base64, while production stores image bytes in Supabase Storage and keeps `storage_path` metadata in Postgres.
 
 ## Why Supabase
 
@@ -13,7 +18,7 @@ This repo is currently runnable as a single Express service with SQLite for loca
 
 1. Create a Supabase project.
 2. Open Supabase SQL Editor.
-3. Run [`supabase/schema.sql`](supabase/schema.sql).
+3. Run [`supabase/schema.sql`](supabase/schema.sql) and enable RLS when prompted.
 4. Create a private Storage bucket named `receipts`.
 5. Add production environment variables in Render:
 
@@ -26,16 +31,19 @@ DATABASE_URL=postgresql://...
 
 ## Current Status
 
-The schema is production-ready, but the Express routes still use the synchronous SQLite adapter. A full Postgres switch should be done by replacing `backend/src/db.js` with an async repository layer and updating route handlers to `await` database calls.
-
-For the current public demo, receipt images are stored in SQLite as base64 evidence so the feature works immediately. In production, store the image file in Supabase Storage and keep only `storage_path` plus metadata in `receipt_images`.
+The Express routes support both adapters. `backend/src/db.js` uses SQLite by default and switches to Postgres when `DATABASE_URL` is present. Receipt uploads use Supabase Storage when `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_STORAGE_BUCKET` are configured.
 
 The app exposes `/api/system/status` and shows a Production Readiness card in the dashboard so the running product can explain whether it is in SQLite demo mode or Supabase/Postgres production mode.
 
-## Migration Plan
+## Verification
 
-1. Add a repository layer with methods such as `getProduct`, `createProduct`, `listReceipts`, and `insertReceipt`.
-2. Implement two adapters: SQLite for local demo, Postgres/Supabase for production.
-3. Switch routes from direct `db.prepare(...)` calls to repository methods.
-4. Move receipt image bytes to Supabase Storage.
-5. Use Postgres row-level security when replacing the current custom JWT auth.
+After setting Render environment variables, run:
+
+```bash
+SMOKE_BASE_URL=https://your-render-url.onrender.com \
+SMOKE_EXPECT_PERSISTENCE=postgres \
+SMOKE_EXPECT_RECEIPT_STORAGE=supabase_storage \
+npm run smoke
+```
+
+The production app should report `persistence.active = postgres` and `receiptStorage.active = supabase_storage`.
