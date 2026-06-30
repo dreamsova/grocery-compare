@@ -13,6 +13,7 @@ The current public v1 uses the Kroger Product API for live Kroger-family store p
 - Product browsing by category and trending grocery items
 - Product enrichment from Open Food Facts and USDA FoodData Central
 - Price history snapshots
+- Receipt image upload for receipt/shelf-tag evidence
 - Socket.IO hooks for realtime list updates
 - Price provenance: official API, manual community price, or receipt-verified price
 
@@ -40,8 +41,9 @@ Use this flow for a quick product walkthrough:
 4. Run the comparison for ZIP code `60614`.
 5. Point out the result summary: cheapest store, potential savings, matched item count, and data source.
 6. Open a product and click `Enrich Data` to show Open Food Facts / USDA metadata and nutrition.
-7. Explain the architecture: Kroger prices come from an official API; stores without public APIs should use manual or receipt-verified community prices instead of brittle scraping.
-8. Mention the next production step: move demo SQLite data to Supabase/Postgres and add receipt upload verification.
+7. Upload a receipt image on a product to show evidence-backed community prices.
+8. Explain the architecture: Kroger prices come from an official API; stores without public APIs should use manual or receipt-verified community prices instead of brittle scraping.
+9. Mention the production persistence path: run `supabase/schema.sql`, move receipt files to Supabase Storage, then replace the SQLite adapter with a Postgres repository layer.
 
 ## Tech Stack
 
@@ -50,6 +52,7 @@ Use this flow for a quick product walkthrough:
 - Database: SQLite via `node-sqlite3-wasm`
 - External APIs: Kroger Product API, Open Food Facts, USDA FoodData Central
 - Deployment target: Render or Railway for the current Express app
+- Production persistence target: Supabase/Postgres, with schema in [supabase/schema.sql](supabase/schema.sql)
 
 ## Local Setup
 
@@ -97,6 +100,8 @@ If no USDA key is configured, the app uses USDA's public low-volume `DEMO_KEY` f
 
 Never commit real `.env` files or API secrets.
 
+For the Supabase/Postgres production path, see [SUPABASE_POSTGRES.md](SUPABASE_POSTGRES.md).
+
 ## Data Source Strategy
 
 The interview-ready direction is not "scrape every grocery store." It is a multi-source grocery intelligence system:
@@ -132,6 +137,8 @@ Examples:
 - `legacy`: older demo fields kept for backward compatibility.
 
 This lets the app support Costco, Trader Joe's, Aldi, and other stores without unsafe scraping. They can enter through community or receipt-verified prices while Kroger remains the official live API source.
+
+Receipt images are available as an additional evidence layer. The demo stores small receipt images in SQLite so it works immediately. Production should store image files in Supabase Storage and keep `storage_path` metadata in Postgres.
 
 ## Verification
 

@@ -113,6 +113,26 @@ db.exec(`
     FOREIGN KEY (list_id) REFERENCES shopping_lists(id) ON DELETE CASCADE,
     FOREIGN KEY (product_id) REFERENCES products(id)
   );
+
+  CREATE TABLE IF NOT EXISTS receipt_images (
+    id TEXT PRIMARY KEY,
+    product_id TEXT NOT NULL,
+    price_snapshot_id TEXT,
+    store TEXT,
+    image_data TEXT NOT NULL,
+    mime_type TEXT NOT NULL,
+    file_name TEXT,
+    file_size INTEGER,
+    note TEXT,
+    uploaded_by TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+    FOREIGN KEY (price_snapshot_id) REFERENCES price_snapshots(id) ON DELETE SET NULL,
+    FOREIGN KEY (uploaded_by) REFERENCES users(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_receipt_images_product_time
+    ON receipt_images(product_id, created_at DESC);
 `);
 
 function ensureColumn(table, column, definition) {

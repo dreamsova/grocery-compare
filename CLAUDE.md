@@ -16,6 +16,8 @@ The product direction is a data-trust-first grocery comparison app: official API
 - `backend/src/db.js`: SQLite database setup
 - `backend/scripts/seed.js`: demo data
 - `backend/scripts/smoke.js`: post-deploy smoke test
+- `supabase/schema.sql`: production Postgres schema target
+- `SUPABASE_POSTGRES.md`: Supabase persistence migration notes
 
 ## Commands
 
@@ -43,6 +45,7 @@ Optional:
 - `DB_PATH`
 - `CORS_ORIGIN`
 - `USDA_FDC_API_KEY` for higher USDA FoodData Central rate limits. Without it, the app uses `DEMO_KEY`.
+- `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_STORAGE_BUCKET` are documented for the production Supabase/Postgres path.
 
 ## Safety Rules
 
@@ -84,3 +87,13 @@ External data-source failures should degrade gracefully. The app should still wo
 - `confidence`: trust score for display and ranking
 - `evidence_note`: optional receipt, shelf-tag, or manual note
 - `submitted_by` and `submitted_at`: who contributed the price and when
+
+## Receipt Evidence
+
+Products can have receipt/shelf-tag image evidence through `receipt_images`.
+
+The demo stores small PNG/JPG/WEBP images as base64 in SQLite so the feature works immediately on localhost and Render. Production should move image bytes to a private Supabase Storage bucket and keep `storage_path` metadata in Postgres.
+
+## UI Direction
+
+Keep the interface simple, readable, and product-focused. Avoid oversized marketing typography. The landing page should explain the product in one glance: compare grocery baskets, inspect source-backed prices, upload receipt evidence, and enrich products from open data.

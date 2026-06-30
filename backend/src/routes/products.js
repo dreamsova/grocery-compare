@@ -57,11 +57,12 @@ function insertPriceSnapshot({
   inStock = 1,
 }) {
   const normalizedKind = normalizeSourceKind(store, sourceKind);
+  const id = nanoid();
   db.prepare(`INSERT INTO price_snapshots
     (id, product_id, store, price, in_stock, source_label, source_kind, confidence, evidence_note, submitted_by, submitted_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
   ).run(
-    nanoid(),
+    id,
     productId,
     store,
     +price,
@@ -72,6 +73,7 @@ function insertPriceSnapshot({
     evidenceNote,
     submittedBy,
   );
+  return id;
 }
 
 function latestPriceFor(productId, store) {
@@ -111,6 +113,39 @@ function parseJson(value) {
   } catch {
     return null;
   }
+}
+
+function receiptRows(productId) {
+  return db.prepare(
+    `SELECT id, product_id, price_snapshot_id, store, mime_type, file_name, file_size, note, uploaded_by, created_at
+     FROM receipt_images
+     WHERE product_id = ?
+     ORDER BY created_at DESC
+     LIMIT 20`
+  ).all(productId).map(row => ({
+    ...row,
+    image_url: `/api/products/${productId}/receipts/${row.id}/image`,
+  }));
+}
+
+function parseReceiptImage(dataUrl) {
+  const match = String(dataUrl || '').match(/^data:(image\/(?:png|jpe?g|webp));base64,([A-Za-z0-9+/=]+)$/);
+  if (!match) {
+    const err = new Error('Receipt image must be a PNG, JPG, or WEBP data URL');
+    err.status = 400;
+    throw err;
+  }
+
+  const mimeType = match[1] === 'image/jpg' ? 'image/jpeg' : match[1];
+  const imageData = match[2];
+  const buffer = Buffer.from(imageData, 'base64');
+  if (!buffer.length || buffer.length > 1_500_000) {
+    const err = new Error('Receipt image must be smaller than 1.5MB');
+    err.status = 400;
+    throw err;
+  }
+
+  return { mimeType, imageData, fileSize: buffer.length, buffer };
 }
 
 // POST /api/products/search — search Kroger for products
@@ -265,7 +300,74 @@ router.get('/:id', (req, res) => {
     `SELECT * FROM price_snapshots WHERE product_id = ? ORDER BY scraped_at DESC LIMIT 200`
   ).all(req.params.id);
 
-  res.json({ ...serializeProduct(product), prices: latestPrices(req.params.id), history });
+  res.json({
+    ...serializeProduct(product),
+    prices: latestPrices(req.params.id),
+    history,
+    receipts: receiptRows(req.params.id),
+  });
+});
+
+// GET /api/products/:id/receipts — list receipt image evidence
+router.get('/:id/receipts', (req, res) => {
+  const product = db.prepare('SELECT id FROM products WHERE id = ?').get(req.params.id);
+  if (!product) return res.status(404).json({ error: 'Product not found' });
+  res.json(receiptRows(req.params.id));
+});
+
+// POST /api/products/:id/receipts — attach receipt/shelf-tag evidence image
+router.post('/:id/receipts', (req, res) => {
+  const product = db.prepare('SELECT id FROM products WHERE id = ?').get(req.params.id);
+  if (!product) return res.status(404).json({ error: 'Product not found' });
+
+  try {
+    const { image_data, price_snapshot_id, store, note, file_name } = req.body || {};
+    const parsed = parseReceiptImage(image_data);
+    const supportedStores = ['kroger', 'manual', 'aldi', 'costco', 'trader_joes', 'walmart', 'instacart'];
+    if (store && !supportedStores.includes(store)) {
+      return res.status(400).json({ error: 'Unsupported store/source' });
+    }
+    if (price_snapshot_id) {
+      const snapshot = db.prepare('SELECT id FROM price_snapshots WHERE id = ? AND product_id = ?')
+        .get(price_snapshot_id, req.params.id);
+      if (!snapshot) return res.status(400).json({ error: 'Price snapshot does not match this product' });
+    }
+
+    const id = nanoid();
+    db.prepare(`INSERT INTO receipt_images
+      (id, product_id, price_snapshot_id, store, image_data, mime_type, file_name, file_size, note, uploaded_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      id,
+      req.params.id,
+      price_snapshot_id || null,
+      store || null,
+      parsed.imageData,
+      parsed.mimeType,
+      file_name?.slice(0, 160) || null,
+      parsed.fileSize,
+      note?.trim()?.slice(0, 500) || null,
+      req.user.userId,
+    );
+
+    const receipt = receiptRows(req.params.id).find(row => row.id === id);
+    res.json({ ok: true, receipt });
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.message });
+  }
+});
+
+// GET /api/products/:id/receipts/:receiptId/image — render receipt image
+router.get('/:id/receipts/:receiptId/image', (req, res) => {
+  const receipt = db.prepare(
+    `SELECT image_data, mime_type FROM receipt_images
+     WHERE id = ? AND product_id = ?`
+  ).get(req.params.receiptId, req.params.id);
+  if (!receipt) return res.status(404).json({ error: 'Receipt not found' });
+
+  res.setHeader('Content-Type', receipt.mime_type);
+  res.setHeader('Cache-Control', 'private, max-age=3600');
+  res.send(Buffer.from(receipt.image_data, 'base64'));
 });
 
 // POST /api/products/:id/enrich — fetch product metadata from open data sources
@@ -407,7 +509,7 @@ router.post('/:id/price', (req, res) => {
   }
   if (!price || isNaN(+price)) return res.status(400).json({ error: 'Valid price required' });
 
-  insertPriceSnapshot({
+  const snapshotId = insertPriceSnapshot({
     productId: req.params.id,
     store,
     price,
@@ -416,7 +518,7 @@ router.post('/:id/price', (req, res) => {
     submittedBy: req.user.userId,
   });
 
-  res.json({ ok: true, prices: latestPrices(req.params.id) });
+  res.json({ ok: true, price_snapshot_id: snapshotId, prices: latestPrices(req.params.id) });
 });
 
 export default router;
