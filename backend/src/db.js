@@ -27,7 +27,11 @@ const _prepare = db.prepare.bind(db);
 db.prepare = (sql) => {
   const stmt = _prepare(sql);
   const _run = stmt.run.bind(stmt);
+  const _get = stmt.get.bind(stmt);
+  const _all = stmt.all.bind(stmt);
   stmt.run = (...args) => _run(args.length === 1 && Array.isArray(args[0]) ? args[0] : args);
+  stmt.get = (...args) => _get(args.length === 1 && Array.isArray(args[0]) ? args[0] : args);
+  stmt.all = (...args) => _all(args.length === 1 && Array.isArray(args[0]) ? args[0] : args);
   return stmt;
 };
 
@@ -123,6 +127,12 @@ ensureColumn('price_snapshots', 'confidence', 'REAL');
 ensureColumn('price_snapshots', 'evidence_note', 'TEXT');
 ensureColumn('price_snapshots', 'submitted_by', 'TEXT');
 ensureColumn('price_snapshots', 'submitted_at', 'TEXT');
+ensureColumn('products', 'brand', 'TEXT');
+ensureColumn('products', 'size', 'TEXT');
+ensureColumn('products', 'barcode', 'TEXT');
+ensureColumn('products', 'nutrition_json', 'TEXT');
+ensureColumn('products', 'external_sources_json', 'TEXT');
+ensureColumn('products', 'enriched_at', 'TEXT');
 
 db.exec(`
   UPDATE price_snapshots

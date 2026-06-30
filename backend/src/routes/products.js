@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid';
 import db from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { searchProducts, findLocations } from '../kroger.js';
+import { enrichProductFromSources } from '../dataSources/index.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -94,6 +95,24 @@ function latestPrices(productId) {
   };
 }
 
+function serializeProduct(product) {
+  if (!product) return null;
+  return {
+    ...product,
+    nutrition: parseJson(product.nutrition_json),
+    external_sources: parseJson(product.external_sources_json) || [],
+  };
+}
+
+function parseJson(value) {
+  if (!value) return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
 // POST /api/products/search — search Kroger for products
 // Body: { query, locationId?, zipCode? }
 // If no locationId provided, uses zipCode (default 60614) to find nearest store.
@@ -135,18 +154,84 @@ router.get('/', (req, res) => {
     : db.prepare(`SELECT * FROM products WHERE created_by = ? LIMIT ? OFFSET ?`)
         .all(req.user.userId, +limit, +offset);
 
-  res.json(products.map(p => ({ ...p, prices: latestPrices(p.id) })));
+  res.json(products.map(p => ({ ...serializeProduct(p), prices: latestPrices(p.id) })));
 });
 
 // POST /api/products
 router.post('/', (req, res) => {
-  const { name, image_url, walmart_url, instacart_url, walmart_price, instacart_price } = req.body;
+  const {
+    name,
+    image_url,
+    walmart_url,
+    instacart_url,
+    walmart_price,
+    instacart_price,
+    brand,
+    size,
+    barcode,
+  } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'Name required' });
 
+  const cleanName = name.trim();
+  const existing = db.prepare('SELECT * FROM products WHERE name = ? AND created_by = ?')
+    .get(cleanName, req.user.userId);
+  if (existing) {
+    db.prepare(`UPDATE products SET
+      image_url = COALESCE(image_url, ?),
+      walmart_url = COALESCE(walmart_url, ?),
+      instacart_url = COALESCE(instacart_url, ?),
+      brand = COALESCE(brand, ?),
+      size = COALESCE(size, ?),
+      barcode = COALESCE(barcode, ?)
+      WHERE id = ?`
+    ).run(
+      image_url ?? null,
+      walmart_url ?? null,
+      instacart_url ?? null,
+      brand?.trim() || null,
+      size?.trim() || null,
+      barcode?.trim() || null,
+      existing.id,
+    );
+
+    if (walmart_price) {
+      insertPriceSnapshot({
+        productId: existing.id,
+        store: 'walmart',
+        price: walmart_price,
+        sourceKind: 'legacy',
+        submittedBy: req.user.userId,
+      });
+    }
+    if (instacart_price) {
+      insertPriceSnapshot({
+        productId: existing.id,
+        store: 'instacart',
+        price: instacart_price,
+        sourceKind: 'legacy',
+        submittedBy: req.user.userId,
+      });
+    }
+
+    const product = db.prepare('SELECT * FROM products WHERE id = ?').get(existing.id);
+    return res.json({ ...serializeProduct(product), prices: latestPrices(existing.id) });
+  }
+
   const id = nanoid();
-  db.prepare(`INSERT INTO products (id, name, image_url, walmart_url, instacart_url, created_by)
-    VALUES (?, ?, ?, ?, ?, ?)`
-  ).run(id, name.trim(), image_url ?? null, walmart_url ?? null, instacart_url ?? null, req.user.userId);
+  db.prepare(`INSERT INTO products
+    (id, name, image_url, walmart_url, instacart_url, created_by, brand, size, barcode)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    id,
+    cleanName,
+    image_url ?? null,
+    walmart_url ?? null,
+    instacart_url ?? null,
+    req.user.userId,
+    brand?.trim() || null,
+    size?.trim() || null,
+    barcode?.trim() || null,
+  );
 
   if (walmart_price) {
     insertPriceSnapshot({
@@ -168,7 +253,7 @@ router.post('/', (req, res) => {
   }
 
   const product = db.prepare('SELECT * FROM products WHERE id = ?').get(id);
-  res.json({ ...product, prices: latestPrices(id) });
+  res.json({ ...serializeProduct(product), prices: latestPrices(id) });
 });
 
 // GET /api/products/:id
@@ -180,7 +265,46 @@ router.get('/:id', (req, res) => {
     `SELECT * FROM price_snapshots WHERE product_id = ? ORDER BY scraped_at DESC LIMIT 200`
   ).all(req.params.id);
 
-  res.json({ ...product, prices: latestPrices(req.params.id), history });
+  res.json({ ...serializeProduct(product), prices: latestPrices(req.params.id), history });
+});
+
+// POST /api/products/:id/enrich — fetch product metadata from open data sources
+router.post('/:id/enrich', async (req, res) => {
+  const product = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
+  if (!product) return res.status(404).json({ error: 'Product not found' });
+
+  const enrichment = await enrichProductFromSources(product, { limit: req.body?.limit || 3 });
+  const summary = enrichment.summary || {};
+  const nutritionJson = summary.nutrition ? JSON.stringify(summary.nutrition) : product.nutrition_json;
+  const sourcesJson = JSON.stringify(enrichment.sources || []);
+  const hasFreshSourceResponse = (enrichment.sources || [])
+    .some(source => source.status === 'ok' || source.status === 'empty');
+
+  db.prepare(`UPDATE products SET
+    brand = COALESCE(brand, ?),
+    size = COALESCE(size, ?),
+    barcode = COALESCE(barcode, ?),
+    image_url = COALESCE(image_url, ?),
+    nutrition_json = COALESCE(?, nutrition_json),
+    external_sources_json = ?,
+    enriched_at = CASE WHEN ? THEN datetime('now') ELSE enriched_at END
+    WHERE id = ?`
+  ).run(
+    summary.brand || null,
+    summary.size || null,
+    summary.barcode || null,
+    summary.imageUrl || null,
+    nutritionJson || null,
+    sourcesJson,
+    hasFreshSourceResponse ? 1 : 0,
+    req.params.id,
+  );
+
+  const updated = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
+  res.json({
+    product: { ...serializeProduct(updated), prices: latestPrices(req.params.id) },
+    enrichment,
+  });
 });
 
 // PUT /api/products/:id
@@ -189,16 +313,31 @@ router.put('/:id', (req, res) => {
     .get(req.params.id, req.user.userId);
   if (!product) return res.status(404).json({ error: 'Not found or not authorized' });
 
-  const { name, image_url, walmart_url, instacart_url } = req.body;
+  const { name, image_url, walmart_url, instacart_url, brand, size, barcode } = req.body;
   db.prepare(`UPDATE products SET
     name = COALESCE(?, name),
     image_url = COALESCE(?, image_url),
     walmart_url = COALESCE(?, walmart_url),
-    instacart_url = COALESCE(?, instacart_url)
+    instacart_url = COALESCE(?, instacart_url),
+    brand = COALESCE(?, brand),
+    size = COALESCE(?, size),
+    barcode = COALESCE(?, barcode)
     WHERE id = ?`
-  ).run(name ?? null, image_url ?? null, walmart_url ?? null, instacart_url ?? null, req.params.id);
+  ).run(
+    name ?? null,
+    image_url ?? null,
+    walmart_url ?? null,
+    instacart_url ?? null,
+    brand ?? null,
+    size ?? null,
+    barcode ?? null,
+    req.params.id,
+  );
 
-  res.json({ ...db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id), prices: latestPrices(req.params.id) });
+  res.json({
+    ...serializeProduct(db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id)),
+    prices: latestPrices(req.params.id),
+  });
 });
 
 // DELETE /api/products/:id

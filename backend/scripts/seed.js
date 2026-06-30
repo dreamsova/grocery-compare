@@ -39,12 +39,14 @@ function createList(name, ownerId) {
   return id;
 }
 
-function addProduct(name, imageUrl, createdBy) {
+function addProduct(name, imageUrl, createdBy, metadata = {}) {
   const existing = db.prepare('SELECT id FROM products WHERE name = ? AND created_by = ?').get(name, createdBy);
   if (existing) return existing.id;
   const id = nanoid();
-  db.prepare(`INSERT INTO products (id, name, image_url, created_by) VALUES (?, ?, ?, ?)`)
-    .run(id, name, imageUrl ?? null, createdBy);
+  db.prepare(`INSERT INTO products
+    (id, name, image_url, created_by, brand, size)
+    VALUES (?, ?, ?, ?, ?, ?)`
+  ).run(id, name, imageUrl ?? null, createdBy, metadata.brand ?? null, metadata.size ?? null);
   return id;
 }
 
@@ -80,17 +82,17 @@ export function seedDemoData() {
   // List 1: Weekly Groceries
   const weeklyId = createList('Weekly Groceries', userId);
   const items1 = [
-    { name: 'Large White Eggs 18ct',         img: 'https://www.kroger.com/product/images/medium/front/0001111060933', kroger: 3.99 },
-    { name: 'Whole Milk 1 Gallon',            img: 'https://www.kroger.com/product/images/medium/front/0001111042850', kroger: 4.49 },
-    { name: 'Boneless Skinless Chicken Breast', img: 'https://www.kroger.com/product/images/medium/front/0028334900000', kroger: 2.49 },
-    { name: 'Chobani Greek Yogurt Plain',     img: 'https://www.kroger.com/product/images/medium/front/0084865810041', kroger: 1.69 },
-    { name: 'Sourdough Bread Loaf',           img: null, kroger: 4.99 },
-    { name: 'Roma Tomatoes',                  img: null, kroger: 1.29 },
-    { name: 'Baby Spinach 5oz',               img: null, kroger: 3.49 },
+    { name: 'Large White Eggs 18ct',         img: 'https://www.kroger.com/product/images/medium/front/0001111060933', brand: 'Kroger', size: '18 ct', kroger: 3.99 },
+    { name: 'Whole Milk 1 Gallon',            img: 'https://www.kroger.com/product/images/medium/front/0001111042850', brand: 'Kroger', size: '1 gal', kroger: 4.49 },
+    { name: 'Boneless Skinless Chicken Breast', img: 'https://www.kroger.com/product/images/medium/front/0028334900000', brand: 'Kroger', size: 'per lb', kroger: 2.49 },
+    { name: 'Chobani Greek Yogurt Plain',     img: 'https://www.kroger.com/product/images/medium/front/0084865810041', brand: 'Chobani', size: '5.3 oz', kroger: 1.69 },
+    { name: 'Sourdough Bread Loaf',           img: null, brand: 'Bakery Fresh', size: '1 loaf', kroger: 4.99 },
+    { name: 'Roma Tomatoes',                  img: null, brand: 'Produce', size: 'per lb', kroger: 1.29 },
+    { name: 'Baby Spinach 5oz',               img: null, brand: 'Simple Truth', size: '5 oz', kroger: 3.49 },
   ];
 
   for (const item of items1) {
-    const pid = addProduct(item.name, item.img, userId);
+    const pid = addProduct(item.name, item.img, userId, item);
     addProductToList(weeklyId, pid, userId);
     addPrice(pid, 'kroger', item.kroger);
   }
@@ -109,7 +111,7 @@ export function seedDemoData() {
   ];
 
   for (const item of items2) {
-    const pid = addProduct(item.name, item.img, userId);
+    const pid = addProduct(item.name, item.img, userId, item);
     addProductToList(bbqId, pid, userId);
     addPrice(pid, 'kroger', item.kroger);
   }
@@ -127,7 +129,7 @@ export function seedDemoData() {
   ];
 
   for (const item of items3) {
-    const pid = addProduct(item.name, item.img, userId);
+    const pid = addProduct(item.name, item.img, userId, item);
     addProductToList(bfastId, pid, userId);
     addPrice(pid, 'kroger', item.kroger);
   }

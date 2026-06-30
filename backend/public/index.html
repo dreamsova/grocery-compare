@@ -250,6 +250,26 @@
       text-transform: uppercase; background: #ecfdf3; color: #166534; white-space: nowrap; }
     .source-pill.dark { background: rgba(255,255,255,.13); color: #fff8ea;
       border: 1px solid rgba(255,255,255,.18); }
+    .source-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 10px; margin-bottom: 16px; }
+    .source-card { background: var(--card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 14px; box-shadow: var(--shadow); }
+    .source-card-top { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start;
+      margin-bottom: 7px; }
+    .source-name { font-weight: 850; letter-spacing: -.03em; }
+    .source-role { color: var(--muted); font-size: .78rem; line-height: 1.35; }
+    .source-status { border-radius: 999px; padding: 3px 7px; font-size: .62rem;
+      font-weight: 850; text-transform: uppercase; white-space: nowrap; }
+    .source-status.ok { background: #dcfce7; color: #166534; }
+    .source-status.warn { background: #fff7ed; color: #c2410c; }
+    .source-status.error { background: #fee2e2; color: #991b1b; }
+    .metadata-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px; margin-bottom: 16px; }
+    .metric-card { background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 12px; }
+    .metric-label { color: var(--muted); font-size: .68rem; font-weight: 850;
+      letter-spacing: .07em; text-transform: uppercase; margin-bottom: 4px; }
+    .metric-value { font-size: 1rem; font-weight: 850; }
     .preset-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 14px; }
     .preset-chip { border: 1px solid var(--border); background: var(--cream);
       border-radius: 999px; padding: 7px 10px; font-size: .78rem; font-weight: 700;
@@ -422,6 +442,7 @@ const state = {
   _subs: [],
   zipCode: '60614',
   homeData: null,
+  sourceStatus: null,
 };
 
 let accessToken = null;   // kept in memory (cookie is httpOnly fallback for SSR)
@@ -574,6 +595,9 @@ function sourceKindLabel(kind) {
   if (kind === 'receipt_verified') return 'Receipt Verified';
   if (kind === 'manual') return 'Manual';
   if (kind === 'legacy') return 'Legacy';
+  if (kind === 'open_product_catalog') return 'Open Product Data';
+  if (kind === 'government_nutrition') return 'Government Nutrition';
+  if (kind === 'receipt_or_manual') return 'Community Evidence';
   return 'Community Price';
 }
 function storeDisplayLabel(store) {
@@ -682,7 +706,7 @@ function renderAuth() {
   const shell = el('div', { class: 'auth-shell' });
 
   const story = el('div', { class: 'auth-story' });
-  story.appendChild(el('div', { class: 'eyebrow' }, 'Official API + whole-list optimization'));
+  story.appendChild(el('div', { class: 'eyebrow' }, 'Official API + open data + receipt evidence'));
   story.appendChild(el('h1', {}, 'Stop price-checking groceries one item at a time.'));
   story.appendChild(el('p', {},
     'Build a basket, compare nearby Kroger-family stores, and see which location wins on total cart cost. Every price keeps its source visible so the demo is easy to trust.'
@@ -698,8 +722,8 @@ function renderAuth() {
   [
     ['Eggs + milk + bread', 'nearby stores'],
     ['Cheapest store', 'highlighted'],
-    ['Data source', 'Kroger API'],
-    ['Next source', 'receipt verified'],
+    ['Price source', 'Kroger API'],
+    ['Product data', 'OFF + USDA'],
   ].forEach(([left, right]) => {
     basket.appendChild(el('div', { class: 'basket-line' }, el('span', {}, left), el('strong', {}, right)));
   });
@@ -803,6 +827,60 @@ function makeField(label, type, placeholder) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Dashboard
 // ─────────────────────────────────────────────────────────────────────────────
+function renderDataSourcesPanel() {
+  const section = el('div', {});
+  const titleRow = el('div', { class: 'flex', style: 'margin-bottom:10px;align-items:center' });
+  titleRow.appendChild(el('span', { class: 'section-title', style: 'margin-bottom:0;flex:1' }, 'Connected Data Sources'));
+  titleRow.appendChild(el('span', { class: 'powered-by' }, 'multi-source'));
+  section.appendChild(titleRow);
+
+  const grid = el('div', { class: 'source-grid' });
+  section.appendChild(grid);
+
+  function renderSources(sources) {
+    grid.innerHTML = '';
+    if (!sources) {
+      grid.appendChild(el('div', { class: 'source-card' },
+        el('div', { class: 'spinner' }),
+        el('div', { class: 'source-role', style: 'margin-top:8px' }, 'Loading data-source registry...')
+      ));
+      return;
+    }
+
+    sources.forEach(source => {
+      const configured = source.configured !== false;
+      const card = el('div', { class: 'source-card' });
+      const top = el('div', { class: 'source-card-top' });
+      top.appendChild(el('div', { class: 'source-name' }, source.label));
+      top.appendChild(el('span', {
+        class: 'source-status ' + (configured ? 'ok' : 'warn'),
+      }, configured ? 'Active' : 'Needs key'));
+      card.appendChild(top);
+      card.appendChild(el('div', { class: 'source-role' }, source.role || sourceKindLabel(source.kind)));
+      card.appendChild(el('div', { class: 'result-item-source' },
+        el('span', { class: 'confidence-dot' }, sourceKindLabel(source.kind)),
+        el('span', { class: 'confidence-dot' }, source.trust || 'Source')
+      ));
+      grid.appendChild(card);
+    });
+  }
+
+  renderSources(state.sourceStatus);
+  if (!state.sourceStatus) {
+    api('/sources')
+      .then(sources => {
+        state.sourceStatus = sources || [];
+        if (state.view === 'dashboard') renderCurrentView();
+      })
+      .catch(() => {
+        state.sourceStatus = [];
+        if (state.view === 'dashboard') renderCurrentView();
+      });
+  }
+
+  return section;
+}
+
 function renderDashboard() {
   const wrap = el('div', {});
 
@@ -817,6 +895,7 @@ function renderDashboard() {
   const heroBtn = el('button', { class: 'btn', style: 'margin-top:14px;background:#fff;color:#1a1a1a;font-weight:700' }, 'Start Comparing →');
   hero.appendChild(heroBtn);
   wrap.appendChild(hero);
+  wrap.appendChild(renderDataSourcesPanel());
 
   const hdr = el('div', { class: 'flex', style: 'margin-bottom:16px' });
   hdr.appendChild(el('div', { style: 'flex:1;font-size:1.1rem;font-weight:700' }, 'My Lists'));
@@ -947,6 +1026,11 @@ function renderListDetail() {
     const nameEl = el('div', { class: 'item-name' + (item.checked ? ' checked' : '') }, item.product_name);
     nameEl.onclick = () => viewProduct(item.product_id);
     nameEl.style.cursor = 'pointer';
+    if (item.brand || item.size) {
+      nameEl.appendChild(el('div', { class: 'result-item-query' },
+        [item.brand, item.size].filter(Boolean).join(' · ')
+      ));
+    }
 
     // Prices
     const prices = el('div', { class: 'item-prices' });
@@ -1099,6 +1183,65 @@ async function viewProduct(id) {
   navigate('product', product);
 }
 
+function renderProductMetadata(p) {
+  const nutrition = p.nutrition;
+  const sources = p.external_sources || [];
+  const hasNutrition = nutrition && ['calories', 'protein', 'carbs', 'fat', 'sugars', 'sodium']
+    .some(field => nutrition[field] !== null && nutrition[field] !== undefined);
+  const hasSources = sources.length > 0;
+  if (!hasNutrition && !hasSources && !p.enriched_at) return null;
+
+  const wrap = el('div', { class: 'card', style: 'margin-bottom:16px' });
+  const title = el('div', { class: 'flex', style: 'align-items:center;margin-bottom:10px' });
+  title.appendChild(el('div', { class: 'section-title', style: 'margin-bottom:0;flex:1' }, 'Product Intelligence'));
+  if (p.enriched_at) title.appendChild(el('span', { class: 'powered-by' }, `Updated ${String(p.enriched_at).slice(0, 10)}`));
+  wrap.appendChild(title);
+
+  if (hasNutrition) {
+    const grid = el('div', { class: 'metadata-grid' });
+    [
+      ['Calories', nutrition.calories != null ? `${Math.round(nutrition.calories)} kcal` : null],
+      ['Protein', nutrition.protein != null ? `${nutrition.protein}g` : null],
+      ['Carbs', nutrition.carbs != null ? `${nutrition.carbs}g` : null],
+      ['Fat', nutrition.fat != null ? `${nutrition.fat}g` : null],
+      ['Sugars', nutrition.sugars != null ? `${nutrition.sugars}g` : null],
+      ['Sodium', nutrition.sodium != null ? `${Math.round(nutrition.sodium)}mg` : null],
+    ].filter(([, value]) => value).forEach(([label, value]) => {
+      grid.appendChild(el('div', { class: 'metric-card' },
+        el('div', { class: 'metric-label' }, label),
+        el('div', { class: 'metric-value' }, value)
+      ));
+    });
+    wrap.appendChild(grid);
+    if (nutrition.basis) wrap.appendChild(el('div', { class: 'text-sm', style: 'margin-top:-8px;margin-bottom:12px' }, nutrition.basis));
+  }
+
+  if (hasSources) {
+    sources.forEach(source => {
+      const row = el('div', { class: 'result-item-row' });
+      const info = el('div', { class: 'result-item-info' });
+      info.appendChild(el('div', { class: 'result-item-name' }, source.label));
+      info.appendChild(el('div', { class: 'result-item-query' },
+        `${source.status === 'ok' ? source.matches.length + ' match(es)' : source.status} · ${sourceKindLabel(source.kind)}`
+      ));
+      const first = source.matches?.[0];
+      if (first) {
+        info.appendChild(el('div', { class: 'result-item-source' },
+          el('span', { class: 'confidence-dot' }, confidenceLabel(first.confidence)),
+          ...(first.badges || []).slice(0, 2).map(badge => el('span', { class: 'confidence-dot' }, badge))
+        ));
+      }
+      row.appendChild(info);
+      row.appendChild(el('span', {
+        class: 'source-status ' + (source.status === 'ok' ? 'ok' : source.status === 'empty' ? 'warn' : 'error'),
+      }, source.status));
+      wrap.appendChild(row);
+    });
+  }
+
+  return wrap;
+}
+
 function renderProductDetail() {
   const p = state.currentProduct;
   const wrap = el('div', {});
@@ -1109,6 +1252,11 @@ function renderProductDetail() {
   }
   const info = el('div', { style: 'flex:1' });
   info.appendChild(el('div', { style: 'font-size:1.1rem;font-weight:700' }, p.name));
+  if (p.brand || p.size || p.barcode) {
+    info.appendChild(el('div', { class: 'text-sm', style: 'margin-top:4px' },
+      [p.brand, p.size, p.barcode ? `UPC ${p.barcode}` : null].filter(Boolean).join(' · ')
+    ));
+  }
   const btnRow = el('div', { class: 'flex', style: 'margin-top:8px' });
   const refreshBtn = el('button', {
     class: 'btn btn-secondary btn-sm',
@@ -1124,9 +1272,32 @@ function renderProductDetail() {
     },
   }, 'Refresh Prices');
   btnRow.appendChild(refreshBtn);
+  const enrichBtn = el('button', {
+    class: 'btn btn-secondary btn-sm',
+    onclick: async () => {
+      enrichBtn.disabled = true;
+      enrichBtn.textContent = 'Enriching...';
+      try {
+        const res = await api(`/products/${p.id}/enrich`, { method: 'POST' });
+        if (res?.product) {
+          state.currentProduct = { ...res.product, history: state.currentProduct.history || [] };
+          renderCurrentView();
+          toast('Open data sources connected');
+        }
+      } catch (e) {
+        toast(e.message);
+      }
+      enrichBtn.disabled = false;
+      enrichBtn.textContent = 'Enrich Data';
+    },
+  }, 'Enrich Data');
+  btnRow.appendChild(enrichBtn);
   info.appendChild(btnRow);
   hdr.append(info);
   wrap.appendChild(hdr);
+
+  const metadata = renderProductMetadata(p);
+  if (metadata) wrap.appendChild(metadata);
 
   // Current prices
   wrap.appendChild(el('div', { class: 'section-title' }, 'Current Prices'));
@@ -1518,12 +1689,14 @@ function renderAddToListModal() {
       style: 'margin-bottom:8px;text-align:left',
       onclick: async () => {
         try {
+          const product = await createProductFromCatalogCard(p);
           await api(`/lists/${list.id}/items`, {
             method: 'POST',
-            body: { product_name: p.name, quantity: 1 },
+            body: { product_id: product.id, quantity: 1 },
           });
           state.pendingAddProduct = null;
           state.modal = null;
+          state.lists = null;
           renderCurrentView();
           toast(`Added to ${list.name}`);
         } catch (e) {
@@ -2063,6 +2236,33 @@ function buildProductCard(p, large) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Add to List flow
 // ─────────────────────────────────────────────────────────────────────────────
+async function createProductFromCatalogCard(p) {
+  const product = await api('/products', {
+    method: 'POST',
+    body: {
+      name: p.name || p.productName,
+      image_url: p.imageUrl || null,
+      brand: p.brand || null,
+      size: p.size || null,
+      barcode: p.barcode || null,
+    },
+  });
+
+  if (p.price != null) {
+    await api(`/products/${product.id}/price`, {
+      method: 'POST',
+      body: {
+        store: 'kroger',
+        price: p.price,
+        source_kind: 'official_api',
+        evidence_note: 'Imported from Kroger browse result',
+      },
+    });
+  }
+
+  return api(`/products/${product.id}`);
+}
+
 async function addProductToList(p) {
   // Ensure lists are loaded
   if (!state.lists) {
@@ -2085,10 +2285,12 @@ async function addProductToList(p) {
   if (owned.length === 1) {
     const list = owned[0];
     try {
+      const product = await createProductFromCatalogCard(p);
       await api(`/lists/${list.id}/items`, {
         method: 'POST',
-        body: { product_name: p.name, quantity: 1 },
+        body: { product_id: product.id, quantity: 1 },
       });
+      state.lists = null;
       toast(`Added to ${list.name}`);
     } catch (e) {
       toast(e.message || 'Failed to add item');
@@ -2097,7 +2299,7 @@ async function addProductToList(p) {
   }
 
   // Multiple lists — show modal
-  state.pendingAddProduct = { name: p.name, imageUrl: p.imageUrl, price: p.price };
+  state.pendingAddProduct = { ...p, name: p.name || p.productName, imageUrl: p.imageUrl, price: p.price };
   state.modal = 'add-to-list';
   renderCurrentView();
 }

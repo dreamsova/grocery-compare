@@ -12,7 +12,7 @@ The product direction is a data-trust-first grocery comparison app: official API
 - `backend/public/index.html`: single-page frontend
 - `backend/src/routes`: API routes
 - `backend/src/kroger.js`: Kroger API client
-- `backend/src/dataSources`: normalized source adapters
+- `backend/src/dataSources`: normalized source adapters for Kroger, Open Food Facts, USDA, and product enrichment
 - `backend/src/db.js`: SQLite database setup
 - `backend/scripts/seed.js`: demo data
 - `backend/scripts/smoke.js`: post-deploy smoke test
@@ -42,6 +42,7 @@ Optional:
 
 - `DB_PATH`
 - `CORS_ORIGIN`
+- `USDA_FDC_API_KEY` for higher USDA FoodData Central rate limits. Without it, the app uses `DEMO_KEY`.
 
 ## Safety Rules
 
@@ -55,10 +56,24 @@ Optional:
 The project should be described as a multi-source grocery intelligence system:
 
 - Official live price data from Kroger
-- Future community/receipt-verified prices for stores without public APIs
-- Product metadata from open datasets
+- Community/receipt-verified prices for stores without public APIs
+- Product metadata from Open Food Facts
+- Nutrition reference data from USDA FoodData Central
 - Store distance and convenience signals
 - Whole-list optimization instead of one-item price comparison
+
+## Product Enrichment
+
+The app has a source registry at `/api/sources` and a product enrichment endpoint at `/api/products/:id/enrich`.
+
+Use data sources by role:
+
+- Kroger: official local price data and store comparison
+- Community prices: Costco, Trader Joe's, Aldi, and other stores without safe public APIs
+- Open Food Facts: packaged-product metadata, package images, labels, and nutrition labels
+- USDA FoodData Central: standardized nutrition reference data
+
+External data-source failures should degrade gracefully. The app should still work if Open Food Facts or USDA is temporarily unavailable.
 
 ## Price Provenance
 

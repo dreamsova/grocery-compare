@@ -6,7 +6,7 @@
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
     "seed": "node scripts/seed.js",
-    "check": "node --check src/index.js && node --check src/db.js && node --check src/kroger.js && node --check src/dataSources/index.js && node --check src/dataSources/krogerSource.js && node --check src/routes/auth.js && node --check src/routes/lists.js && node --check src/routes/products.js && node --check src/routes/compare.js && node --check src/routes/browse.js && node --check scripts/seed.js && node --check scripts/smoke.js",
+    "check": "node --check src/index.js && node --check src/db.js && node --check src/kroger.js && node --check src/dataSources/index.js && node --check src/dataSources/krogerSource.js && node --check src/dataSources/openFoodFactsSource.js && node --check src/dataSources/usdaSource.js && node --check src/dataSources/productEnrichment.js && node --check src/routes/auth.js && node --check src/routes/lists.js && node --check src/routes/products.js && node --check src/routes/compare.js && node --check src/routes/browse.js && node --check src/routes/sources.js && node --check scripts/seed.js && node --check scripts/smoke.js",
     "smoke": "node scripts/smoke.js"
   },
   "dependencies": {

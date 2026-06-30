@@ -48,6 +48,13 @@ async function main() {
   if (ownedCount < 1) throw new Error('Expected at least one owned demo list');
   console.log(`lists ok: ${ownedCount} owned`);
 
+  const sources = await request('/api/sources', { headers: { Cookie: cookie } });
+  const sourceIds = (sources.body || []).map(source => source.id);
+  for (const expected of ['kroger', 'community_prices', 'open_food_facts', 'usda_fdc']) {
+    if (!sourceIds.includes(expected)) throw new Error(`Missing data source: ${expected}`);
+  }
+  console.log(`sources ok: ${sourceIds.join(', ')}`);
+
   if (runCompare) {
     const compare = await request('/api/compare', {
       method: 'POST',

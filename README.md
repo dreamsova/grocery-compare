@@ -11,6 +11,7 @@ The current public v1 uses the Kroger Product API for live Kroger-family store p
 - Live Kroger-family store search by ZIP code
 - Whole-list price comparison across nearby stores
 - Product browsing by category and trending grocery items
+- Product enrichment from Open Food Facts and USDA FoodData Central
 - Price history snapshots
 - Socket.IO hooks for realtime list updates
 - Price provenance: official API, manual community price, or receipt-verified price
@@ -38,15 +39,16 @@ Use this flow for a quick product walkthrough:
 3. Open the `Compare` tab. The app starts with a realistic basket: eggs, milk, bread, bananas, and chicken.
 4. Run the comparison for ZIP code `60614`.
 5. Point out the result summary: cheapest store, potential savings, matched item count, and data source.
-6. Explain the architecture: Kroger prices come from an official API; stores without public APIs should use manual or receipt-verified community prices instead of brittle scraping.
-7. Mention the next production step: move demo SQLite data to Supabase/Postgres and add receipt upload verification.
+6. Open a product and click `Enrich Data` to show Open Food Facts / USDA metadata and nutrition.
+7. Explain the architecture: Kroger prices come from an official API; stores without public APIs should use manual or receipt-verified community prices instead of brittle scraping.
+8. Mention the next production step: move demo SQLite data to Supabase/Postgres and add receipt upload verification.
 
 ## Tech Stack
 
 - Frontend: vanilla SPA served from Express
 - Backend: Node.js, Express, Socket.IO
 - Database: SQLite via `node-sqlite3-wasm`
-- External API: Kroger Product API
+- External APIs: Kroger Product API, Open Food Facts, USDA FoodData Central
 - Deployment target: Render or Railway for the current Express app
 
 ## Local Setup
@@ -85,6 +87,14 @@ KROGER_CLIENT_SECRET
 JWT_SECRET
 ```
 
+Optional for higher USDA rate limits:
+
+```text
+USDA_FDC_API_KEY
+```
+
+If no USDA key is configured, the app uses USDA's public low-volume `DEMO_KEY` for portfolio/demo usage.
+
 Never commit real `.env` files or API secrets.
 
 ## Data Source Strategy
@@ -93,10 +103,13 @@ The interview-ready direction is not "scrape every grocery store." It is a multi
 
 - Official API source: Kroger live prices
 - Community source: user-submitted or receipt-verified prices
-- Product metadata: Open Food Facts and USDA FoodData Central
-- Store metadata: Google Places or retailer location APIs
+- Open product catalog: Open Food Facts for packaged-product metadata, images, labels, and nutrition labels
+- Government nutrition reference: USDA FoodData Central for standardized nutrition data
+- Future store metadata: Google Places or retailer location APIs
 
 This makes the product more reliable and easier to explain than depending on brittle website scraping.
+
+The `/api/sources` endpoint exposes the source registry used by the UI. Product detail pages can call `/api/products/:id/enrich` to fetch and cache metadata from open sources.
 
 ## Data Trust Layer
 

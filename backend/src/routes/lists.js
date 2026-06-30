@@ -50,6 +50,8 @@ router.get('/:id', (req, res) => {
   const items = db.prepare(`
     SELECT li.*,
       p.name AS product_name,
+      p.brand,
+      p.size,
       p.image_url,
       p.walmart_url,
       p.instacart_url,
